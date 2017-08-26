@@ -46,30 +46,71 @@ class NotesView(View):
 
         # Events
         self.Bind(wx.html.EVT_HTML_LINK_CLICKED, self.OnClick)
+        self.Bind(wx.EVT_TREE_SEL_CHANGED, self.OnNoteChanged, self.tree)
+        self.Bind(wx.EVT_TREE_ITEM_EXPANDING, self.OnNoteExpand, self.tree)
+        self.Bind(wx.EVT_TREE_ITEM_COLLAPSED, self.OnNoteCollapse, self.tree)
 
         # Initialize
         self.refresh_tree()
+
+    def populate_tree(self, item):
+        # Determine the items note
+        data = self.tree.GetItemData(item)
+        if not data:
+            return
+
+        note = data.GetData()
+        children = self._model.get_children(note)
+        for child in children:
+            name = child[-1]
+            child_item = self.tree.AppendItem(item, name, data=wx.TreeItemData(child))
+            has_children = self._model.get_children(child)
+            self.tree.SetItemHasChildren(child_item, len(has_children) > 0)
 
     def refresh_tree(self):
         # self.set_selection(None)
         self.tree.DeleteAllItems()
 
-        root_item = self.tree.AddRoot("")
-
-        children = self._model.get_children()
-        for child in children:
-            name = child[-1]
-            child_item = self.tree.AppendItem(root_item, name, data=wx.TreeItemData(child))
-            has_children = self._model.get_children(child)
-            self.tree.SetItemHasChildren(child_item, len(has_children) > 0)
-
-
-
-
-
-
+        root_item = self.tree.AddRoot("", data=wx.TreeItemData(None))
+        self.populate_tree(root_item)
 
 
     def OnClick(self, evt):
         wx.MessageBox(evt.GetLinkInfo().GetHref(), "Title", parent=self)
         pass
+
+    def OnNoteChanged(self, evt):
+        item = evt.GetItem();
+        if not item.IsOk():
+            return
+
+        # TreeItemData from tree
+        note = self.tree.GetItemData(item)
+        if not note:
+            return
+
+        # Data from tree item data
+        note = note.GetData()
+
+        try:
+            contents = self._model.read_note(note)
+            self.source.SetValue(contents)
+        except Exception as e:
+            wx.LogError(str(e))
+
+    def OnNoteExpand(self, evt):
+        item = evt.GetItem()
+        if not item.IsOk():
+            return
+
+        self.populate_tree(item)
+
+    def OnNoteCollapse(self, evt):
+        item = evt.GetItem()
+        if not item.IsOk():
+            return
+
+        self.tree.DeleteChildren(item)
+
+
+

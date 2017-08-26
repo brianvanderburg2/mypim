@@ -27,6 +27,7 @@ class Pim(object):
     def __init__(self, directory):
         # Basic setup
         self._directory = directory
+        self._progress_fn = None
         self._models = {}
         self._listeners = {}
 
@@ -69,10 +70,25 @@ class Pim(object):
             for listener in self._listeners[event]:
                 listener(*args, **kwargs)
 
+    def register_progress_function(self, callback=None):
+        """ Register a progress function.
+            The progress function can take two optional arguments.
+                1. A message to be displayed
+                2. A percentage of completion.
+            The progress function can return:
+                True for the caller to continue
+                False for the caller to abort
+        """
+        self._progress_fn = callback
+
+    def get_progress_function(self):
+        """ Return the progress function. """
+        return self._progress_fn
+
     def get_directory(self):
         return self._directory
 
-    def get_data_directory(self, model=None):
+    def get_data_directories(self, model=None):
         """ Return a search path of supplied data directories, ie templates, etc. """
         roots = [
             os.path.join(self._directory, "data"),
@@ -80,14 +96,13 @@ class Pim(object):
             os.path.jon(os.path.dirname(__file), "data")
         ]
 
-        return (os.path.join(i, model.MODEL_NAME if model else "common") for i in roots)
+        return tuple(roots) if model is None else (os.path.join(i, model.MODEL_NAME) for i in roots)
 
-
-    def get_storage_directory(self, model=None):
+    def get_storage_directory(self, model):
         """ Return the storage directory. IE where the model puts it's files. """
-        return os.path.join(self._directory, model.MODEL_NAME if model else "common")
+        return os.path.join(self._directory, model.MODEL_NAME)
 
-    def get_cache_directory(self, model=None):
+    def get_cache_directory(self, model):
         """ Return a cache directory. """
-        return os.path.join(self._directory, "cache", model.MODEL_NAME if model else "common")
+        return os.path.join(self._directory, "cache", model.MODEL_NAME)
 

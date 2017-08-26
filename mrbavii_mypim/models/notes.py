@@ -4,8 +4,21 @@ __author__      =   "Brian Allen Vanderburg II"
 __copyright__   =   "Copyright (C) 2017 Brian Allen Vanderburg II"
 __license__     =   "Apache License 2.0"
 
+
+"""
+Notes storage format.
+
+Each note is essentially a dirctory under the notes storage.  The name
+of the note is based on the directory name.  The actual note content
+is stored in a file called "contents.note" in the given directory. The
+advantage of this is that to move or rename a note only requires moving
+that directory as all attachments and sub-notes are part of the directory.
+"""
+
+
 import os
 import re
+import io
 
 from .model import Model
 
@@ -14,6 +27,8 @@ from ..errors import Error
 class NotesModel(Model):
     """ Represent a tree of notes. """
     MODEL_NAME="notes"
+
+    NOTE_FILENAME="contents.note"
 
     # Valid name regex uses a literal space character to match a space but
     # not tabs/newlines.
@@ -39,22 +54,34 @@ class NotesModel(Model):
         # contain multiple consecutive spaces.
         return self._valid_name_re.match(name)
 
+    def valid_path(self, path):
+        """ Return if a path is valid. """
+        return isinstance(path, (list, tuple)) and all(self.valid_name(i) for i in path)
+
     def _path_to_file(self, path):
         return os.path.join(i.replace(" ", "_") for i in path)
 
     def _file_to_path_part(self, file):
         return file.replace("_", " ")
 
+    def _get_note_dir_file(self, path=None):
+        if path is None:
+            return (self._directory, None)
+        else:
+            if not self.valid_path(path):
+                raise Error("Invalid note path.")
+
+            directory = os.path.join(self._directory, *(self._path_to_file(path)))
+            file = os.path.join(directory, self.NOTE_FILENAME)
+
+            return (directory, file)
+
     def get_children(self, path=None):
         """" Return a list of full paths for each note under the parent. """
         results = []
         found = []
 
-        if path:
-            directory = os.path.join(self._directory, *(self._path_to_file(path)))
-        else:
-            directory = self._directory
-
+        (directory, _) = self._get_note_dir_file(path)
         if not os.path.isdir(directory):
             return results
 
@@ -63,16 +90,7 @@ class NotesModel(Model):
                 continue
 
             fullfile = os.path.join(directory, file)
-            if os.path.islink(fullfile):
-                continue
-
-            if os.path.isfile(fullfile):
-                if not file.lower().endswith(".note"):
-                    continue
-                file = file[:-5]
-            elif os.path.isdir(fullfile):
-                pass
-            else:
+            if os.path.islink(fullfile) or not os.path.isdir(fullfile):
                 continue
 
             name = self._file_to_path_part(file)
@@ -85,16 +103,47 @@ class NotesModel(Model):
 
         return results
 
-    def create_note(self, name, path=None):
+    def get_attachments(self, path):
+        """ Return the attachment directory for a given note. """
+        (directory, file) = self._get_note_dir_file(path)
+        return directory
+
+    def create_note(self, path):
         """ Create a new note under parent. """
-        pass
+        (directory, file) = self._get_note_dir_file(path)
+        if os.path.isfile(file):
+            raise Error("Note already exists")
+
+        try:
+            os.makedirs(directory)
+            with io.open(file, "wt", newline=None) as handle:
+                handle.write("<note></note>")
+        except (IOError, OSError) as e:
+            raise Error(str(e))
 
     def read_note(self, path):
-        """ Reach a given note based on the fullpath name. """
-        pass
+        """ Read a given note based on the fullpath name. """
+        (directory, file) = self._get_note_dir_file(path)
+        if not os.path.isfile(file):
+            raise Error("Note does not exist.")
+
+        try:
+            with io.open(file, "rt", newline=None) as handle:
+                return handle.read()
+        except (IOError, OSError) as e:
+            raise Error(str(e))
 
     def write_note(self, path, contents):
-        pass
+        """ Save a given note. """
+        (directory, file) = self._get_note_dir_file(path)
+        if not os.path.isdir(directory):
+            raise Error("No such note")
+
+        try:
+            with io.open(file, "wt", newline=None) as handle:
+                handle.write(contents)
+        except (IOError, OSError) as e:
+            raise Error(str(e))
 
     def move_note(self, path, new_parent):
         pass
@@ -103,6 +152,9 @@ class NotesModel(Model):
         pass
 
     def delete_note(self, path):
+        pass
+
+    def parse_note(self, path):
         pass
 
     def get_attachements(self, path, attachment=None):
