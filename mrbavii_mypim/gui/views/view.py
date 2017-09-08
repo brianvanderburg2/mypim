@@ -16,7 +16,6 @@ class View(wx.Panel):
         self._pim = pim
 
 
-    def get_icon(self):
+    def GetIcon(self):
         return None
-
 

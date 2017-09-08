@@ -7,6 +7,8 @@ __license__     =   "Apache License 2.0"
 
 import wx
 
+from mrbaviirc.gui.wx import bookctrl
+
 from ..pim import Pim
 
 class MainWindow(wx.Frame):
@@ -15,61 +17,78 @@ class MainWindow(wx.Frame):
         wx.Frame.__init__(self, None, wx.ID_ANY, "Main Window")
 
         self._pim = Pim(directory)
-        self.create_widgets()
+        self.InitGui()
 
+    def InitGui(self):
 
-
-
-    def create_widgets(self):
-
-        # General window settings
-        panel = wx.Panel(self)
-
-        # Menu Bar
-        # Tool Bar
-        bar = self.CreateToolBar()
-
-
-        # Status Bar
-        bar = self.CreateStatusBar()
-        self.SetStatusBar(bar)
+        # Register our listeners first
+        self._pim.listen("view-restore", self.OnViewRestore)
+        self._pim.listen("view-save", self.OnViewSave)
 
         # Log Window
 
         # Views
-        view_images = wx.ImageList(32, 32)
-
-        self.views = wx.Listbook(panel, wx.ID_ANY)
-
-        self.views.AssignImageList(view_images)
+        self.views = bookctrl.ScrolledButtonBook(self, wx.ID_ANY, wx.LEFT, 3, -1)
 
         from . import views
 
         for view in views.all_views:
             view_window = view(self.views, self._pim)
-            image_index = view_images.AddIcon(view_window.get_icon())
-            self.views.AddPage(view_window, view.VIEW_NAME, False, image_index)
+            view_bitmap = wx.BitmapFromIcon(view_window.GetIcon())
+            self.views.AddPage(view_window, view.VIEW_NAME, view_bitmap)
 
         for i in range(50):
-            self.views.AddPage(wx.Panel(self.views, wx.ID_ANY), "Test", False, image_index)
-
-        # Sizers
-        sizer = wx.BoxSizer(wx.HORIZONTAL)
-        sizer.AddF(self.views, wx.SizerFlags(1).Expand().Border(wx.ALL))
-        
-        panel.SetSizerAndFit(sizer)
-        panel.SetAutoLayout(True)
-
-
+            self.views.AddPage(wx.Panel(self.views, wx.ID_ANY), "Test", view_bitmap)
 
         # Top sizer
         border= wx.SizerFlags.GetDefaultBorder()
 
         sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer.SetMinSize((300, 300))
-        sizer.AddF(panel, wx.SizerFlags(1).Expand().Border(wx.ALL))
+        sizer.AddF(self.views, wx.SizerFlags(1).Expand().Border(wx.ALL))
 
         self.SetSizerAndFit(sizer)
         self.SetAutoLayout(True)
         self.Layout()
+
+        # Restore view classes
+        self._pim.notify("view-restore")
+
+        # Events
+        self.Bind(wx.EVT_CLOSE, self.OnClose)
+
+    def OnClose(self, event):
+        self._pim.notify("view-save")
+
+        self.Destroy()
+
+    def OnViewRestore(self):
+        config = wx.Config.Get()
+        changer = wx.ConfigPathChanger(config, "/Views/MainWindow/")
+
+        left = config.ReadInt("Left", -1)
+        top = config.ReadInt("Top", -1)
+        width = config.ReadInt("Width", -1)
+        height = config.ReadInt("Height", -1)
+
+        if left >= 0 and top >= 0:
+            self.SetPosition((left, top))
+
+        if width >= 0 and height >= 0:
+            size = wx.Size(width, height)
+            size.IncTo(self.GetMinSize())
+            self.SetSize(size)
+
+    def OnViewSave(self):
+        config = wx.Config.Get()
+        changer = wx.ConfigPathChanger(config, "/Views/MainWindow/")
+
+        pos = self.GetPosition()
+        size = self.GetSize()
+
+        config.WriteInt("Left", pos.x) 
+        config.WriteInt("Top", pos.y)
+        config.WriteInt("Width", size.width)
+        config.WriteInt("Height", size.height)
+
 

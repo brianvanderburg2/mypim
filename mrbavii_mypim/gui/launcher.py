@@ -16,9 +16,9 @@ class LauncherDialog(wx.Dialog):
         wx.Dialog.__init__(self, None, wx.ID_ANY, "Choose PIM")
 
         self.result = None
-        self.InitUI()
+        self.InitGui()
 
-    def InitUI(self):
+    def InitGui(self):
         """ Create the GUI. """
 
         # Widgets

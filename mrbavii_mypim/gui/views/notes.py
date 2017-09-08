@@ -18,13 +18,16 @@ class NotesView(View):
         View.__init__(self, parent, pim)
         self._model = pim.get_model("notes")
 
-        self.init_gui()
+        self._pim.listen("view-restore", self.OnViewRestore)
+        self._pim.listen("view-save", self.OnViewSave)
 
-    def get_icon(self):
+        self.InitGui()
+
+    def GetIcon(self):
         return wx.ArtProvider.GetIcon(wx.ART_ERROR, size=(32, 32))
 
 
-    def init_gui(self):
+    def InitGui(self):
         # Create the basic GUI
         self.splitter = wx.SplitterWindow(self)
 
@@ -51,9 +54,9 @@ class NotesView(View):
         self.Bind(wx.EVT_TREE_ITEM_COLLAPSED, self.OnNoteCollapse, self.tree)
 
         # Initialize
-        self.refresh_tree()
+        self.RefreshTree()
 
-    def populate_tree(self, item):
+    def PopulateTree(self, item):
         # Determine the items note
         data = self.tree.GetItemData(item)
         if not data:
@@ -67,12 +70,12 @@ class NotesView(View):
             has_children = self._model.get_children(child)
             self.tree.SetItemHasChildren(child_item, len(has_children) > 0)
 
-    def refresh_tree(self):
+    def RefreshTree(self):
         # self.set_selection(None)
         self.tree.DeleteAllItems()
 
         root_item = self.tree.AddRoot("", data=wx.TreeItemData(None))
-        self.populate_tree(root_item)
+        self.PopulateTree(root_item)
 
 
     def OnClick(self, evt):
@@ -103,7 +106,7 @@ class NotesView(View):
         if not item.IsOk():
             return
 
-        self.populate_tree(item)
+        self.PopulateTree(item)
 
     def OnNoteCollapse(self, evt):
         item = evt.GetItem()
@@ -111,6 +114,20 @@ class NotesView(View):
             return
 
         self.tree.DeleteChildren(item)
+
+    def OnViewRestore(self):
+        config = wx.Config.Get()
+        changer = wx.ConfigPathChanger(config, "/Views/Notes/")
+        position = config.ReadInt("SashPosition", 40)
+        self.splitter.SetSashPosition(position)
+        print(position)
+
+    def OnViewSave(self):
+
+        config = wx.Config.Get()
+        changer = wx.ConfigPathChanger(config, "/Views/Notes/")
+
+        config.WriteInt("SashPosition", self.splitter.GetSashPosition())
 
 
 

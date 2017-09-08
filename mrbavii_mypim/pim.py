@@ -8,6 +8,8 @@ __license__     =   "Apache License 2.0"
 
 from . import errors
 
+from . import platform
+
 import os
 
 
@@ -25,6 +27,8 @@ class Pim(object):
     """
 
     def __init__(self, directory):
+        """ Create/open a PIM associated with a given directory. """
+
         # Basic setup
         self._directory = directory
         self._progress_fn = None
@@ -37,24 +41,13 @@ class Pim(object):
         for model in models.all_models:
             self._models[model.MODEL_NAME] = model(self)
 
-    def isok(self):
-        return self._opened
-
-    def open(self):
-        if os.path.isfile(self._file):
-            pass # Read settings file
-        else:
-            pass # Create initial settings file
-
-        self._opened = True
-        return True
-
     def get_model(self, name):
+        """ Return the instance for a given model. """
         return self._models.get(name, None)
 
 
-    def listen(self, event, model, callback):
-        """ Register a listener for a given callback. """
+    def listen(self, event, callback):
+        """ Register a listener for a given event. """
         # TODO: store a weakref of the callback so if the instance
         # goes out of existance, the callback is not called.
 
@@ -64,15 +57,14 @@ class Pim(object):
         self._listeners[event].append(callback)
 
     def notify(self, event, *args, **kwargs):
-        """ Call a listeners of an event. """
+        """ Call all listeners of an event. """
         if event in self._listeners:
-            # Call each listener
             for listener in self._listeners[event]:
                 listener(*args, **kwargs)
 
     def register_progress_function(self, callback=None):
         """ Register a progress function.
-            The progress function can take two optional arguments.
+            The progress function can take two arguments.
                 1. A message to be displayed
                 2. A percentage of completion.
             The progress function can return:
@@ -81,22 +73,42 @@ class Pim(object):
         """
         self._progress_fn = callback
 
-    def get_progress_function(self):
-        """ Return the progress function. """
-        return self._progress_fn
+    def call_progress_function(self, message, percent):
+        """ Call the progress function. """
+        if self._progress_fn:
+            return self._progress_fn(message, percent)
+        else:
+            return True
+
+    def register_log_function(self, callback=None):
+        """ Register a simple logging function.
+            This function will be called when simple errors occur.
+            The progress function takes the following arguments:
+                1. The logging level
+                2. A string describing the logging source
+                3. A message
+            The logging function return is ignored.
+        """
+        self._log_fn = callback
+
+    def call_log_function(self, level, source, message):
+        """ Call a logging function if registered. """
+        if self._log_fn:
+            self._log_fn(level, source, message)
 
     def get_directory(self):
+        """ Return the PIM directory. """
         return self._directory
 
-    def get_data_directories(self, model=None):
+    def get_data_directories(self):
         """ Return a search path of supplied data directories, ie templates, etc. """
-        roots = [
+        dirs = (
             os.path.join(self._directory, "data"),
-            # get user data directory
-            os.path.jon(os.path.dirname(__file), "data")
-        ]
+            platform.get_user_data_dir("mypim"),
+            os.path.join(os.path.dirname(__file__), "data")
+        )
 
-        return tuple(roots) if model is None else (os.path.join(i, model.MODEL_NAME) for i in roots)
+        return dirs
 
     def get_storage_directory(self, model):
         """ Return the storage directory. IE where the model puts it's files. """
