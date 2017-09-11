@@ -18,8 +18,8 @@ class NotesView(View):
         View.__init__(self, parent, pim)
         self._model = pim.get_model("notes")
 
-        self._pim.listen("view-restore", self.OnViewRestore)
-        self._pim.listen("view-save", self.OnViewSave)
+        self._pim.add_listener("view-restore", self.OnViewRestore)
+        self._pim.add_listener("view-save", self.OnViewSave)
 
         self.InitGui()
 

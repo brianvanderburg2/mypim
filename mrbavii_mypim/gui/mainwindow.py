@@ -22,8 +22,8 @@ class MainWindow(wx.Frame):
     def InitGui(self):
 
         # Register our listeners first
-        self._pim.listen("view-restore", self.OnViewRestore)
-        self._pim.listen("view-save", self.OnViewSave)
+        self._pim.add_listener("view-restore", self.OnViewRestore)
+        self._pim.add_listener("view-save", self.OnViewSave)
 
         # Log Window
 
@@ -52,13 +52,13 @@ class MainWindow(wx.Frame):
         self.Layout()
 
         # Restore view classes
-        self._pim.notify("view-restore")
+        self._pim.notify_listeners("view-restore")
 
         # Events
         self.Bind(wx.EVT_CLOSE, self.OnClose)
 
     def OnClose(self, event):
-        self._pim.notify("view-save")
+        self._pim.notify_listeners("view-save")
 
         self.Destroy()
 

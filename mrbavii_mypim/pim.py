@@ -5,12 +5,14 @@ __copyright__   =   "Copyright (C) 2017 Brian Allen Vanderburg II"
 __license__     =   "Apache License 2.0"
 
 
+import os
+
+from mrbaviirc.pattern.listener import ListenerMixin
 
 from . import errors
 
 from . import platform
 
-import os
 
 
 class Error(errors.Error):
@@ -18,7 +20,7 @@ class Error(errors.Error):
     pass
 
 
-class Pim(object):
+class Pim(ListenerMixin):
     """
     This object represents access to an instance of a PIM and it's data.
     It provides methods to access files/directories under the PIM's data,
@@ -29,11 +31,12 @@ class Pim(object):
     def __init__(self, directory):
         """ Create/open a PIM associated with a given directory. """
 
+        ListenerMixin.__init__(self)
+
         # Basic setup
         self._directory = directory
         self._progress_fn = None
         self._models = {}
-        self._listeners = {}
 
         # Next open/create each model
         import models
@@ -44,23 +47,6 @@ class Pim(object):
     def get_model(self, name):
         """ Return the instance for a given model. """
         return self._models.get(name, None)
-
-
-    def listen(self, event, callback):
-        """ Register a listener for a given event. """
-        # TODO: store a weakref of the callback so if the instance
-        # goes out of existance, the callback is not called.
-
-        if not event in self._listeners:
-            self._listeners[event] = []
-
-        self._listeners[event].append(callback)
-
-    def notify(self, event, *args, **kwargs):
-        """ Call all listeners of an event. """
-        if event in self._listeners:
-            for listener in self._listeners[event]:
-                listener(*args, **kwargs)
 
     def register_progress_function(self, callback=None):
         """ Register a progress function.
