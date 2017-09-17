@@ -4,11 +4,13 @@ __author__      =   "Brian Allen Vanderburg II"
 __copyright__   =   "Copyright (C) 2017 Brian Allen Vanderburg II"
 __license__     =   "Apache License 2.0"
 
+import os
 
 import wx
 import wx.html # Notes mention this should be imported before the wx.App is created
 
 from .mainwindow import MainWindow
+from .art import ArtProvider
 
 class App(wx.App):
     def OnInit(self):
@@ -20,6 +22,15 @@ class App(wx.App):
         if self.instance.IsAnotherRunning():
             wx.MessageBox("Another instance of {0} is running.".format(self.GetAppName()), "ERROR")
             return False
+
+        # Create our art provider
+        art = ArtProvider(
+            os.path.join(
+                os.path.dirname(__file__),
+                "..", "data", "icons"
+            )
+        )
+        wx.ArtProvider.Push(art)
 
         # Standard paths
         paths = wx.StandardPaths.Get()

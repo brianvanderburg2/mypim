@@ -20,14 +20,21 @@ import os
 import re
 import io
 
-from .model import Model
+try:
+    from xml.etree import cElementTree as ET
+except ImportError:
+    from xml.etree import ElemenetTree as ET
 
+from mrbaviirc import template
+from mrbaviirc.template.lib.xml import ElementTreeWrapper
+
+from .. import util
+from .model import Model
 from ..errors import Error
 
 class NotesModel(Model):
     """ Represent a tree of notes. """
     MODEL_NAME="notes"
-
     NOTE_FILENAME="contents.note"
 
     # Valid name regex uses a literal space character to match a space but
@@ -103,7 +110,7 @@ class NotesModel(Model):
 
         return results
 
-    def get_attachments(self, path):
+    def get_attachments(self, path, attachment=None):
         """ Return the attachment directory for a given note. """
         (directory, file) = self._get_note_dir_file(path)
         return directory
@@ -155,11 +162,30 @@ class NotesModel(Model):
         pass
 
     def parse_note(self, path):
-        pass
+        """ Parse note into HTML. """
+        # This sould possible be with the view instead the model
 
-    def get_attachements(self, path, attachment=None):
-        pass
+        (_, file) = self._get_note_dir_file(path)
+        if not os.path.isfile(file):
+            return # Error if note file doesn't exist?
 
+        try:
+            xml = ET.parse(file)
+            root = xml.getroot()
 
+            context = {
+                "xml": ElementTreeWrapper(root)
+            }
 
+            paths = map(lambda i: os.path.join(i, "templates"), self._pim.get_data_directories())
+            loader = template.SearchPathLoader(paths)
+            env = template.Environment(loader=loader)
+
+            renderer = template.StringRenderer()
+            tmpl = env.load_file("notes/main.tmpl")
+            tmpl.render(renderer, context)
+        except Exception as e:
+            raise Error(str(e))
+
+        return renderer.get()
 

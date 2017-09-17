@@ -13,6 +13,8 @@ test:
 clean: check
 	rm -rf test/output
 	rm -rf output
+	find -name "*.py[co]" -delete
+	find -depth \( -path "*/__pycache__/*" -o -name __pycache__ \) -delete
 
 .PHONY: tarball
 tarball: NAME=mrbavii_mypim-$(shell date +%Y%m%d)-$(shell git describe --always)
@@ -22,5 +24,5 @@ tarball: check
 
 .PHONY: run
 run:
-	python -m mrbavii_mypim.main
+	python -B -m mrbavii_mypim.main
 

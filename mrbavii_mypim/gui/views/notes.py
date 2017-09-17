@@ -8,8 +8,8 @@ __license__     =   "Apache License 2.0"
 import wx
 import wx.html
 
-
 from .view import View
+
 
 class NotesView(View):
     VIEW_NAME = "Notes"
@@ -24,7 +24,7 @@ class NotesView(View):
         self.InitGui()
 
     def GetIcon(self):
-        return wx.ArtProvider.GetIcon(wx.ART_ERROR, size=(32, 32))
+        return wx.ArtProvider.GetIcon("notes", size=(32, 32))
 
 
     def InitGui(self):
@@ -79,7 +79,8 @@ class NotesView(View):
 
 
     def OnClick(self, evt):
-        wx.MessageBox(evt.GetLinkInfo().GetHref(), "Title", parent=self)
+        #wx.MessageBox(evt.GetLinkInfo().GetHref(), "Title", parent=self)
+        evt.Skip()
         pass
 
     def OnNoteChanged(self, evt):
@@ -98,8 +99,11 @@ class NotesView(View):
         try:
             contents = self._model.read_note(note)
             self.source.SetValue(contents)
+            html = self._model.parse_note(note)
+            self.view.SetPage(html)
         except Exception as e:
             wx.LogError(str(e))
+
 
     def OnNoteExpand(self, evt):
         item = evt.GetItem()
@@ -120,7 +124,6 @@ class NotesView(View):
         changer = wx.ConfigPathChanger(config, "/Views/Notes/")
         position = config.ReadInt("SashPosition", 40)
         self.splitter.SetSashPosition(position)
-        print(position)
 
     def OnViewSave(self):
 

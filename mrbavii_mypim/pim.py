@@ -90,7 +90,7 @@ class Pim(ListenerMixin):
         """ Return a search path of supplied data directories, ie templates, etc. """
         dirs = (
             os.path.join(self._directory, "data"),
-            platform.get_user_data_dir("mypim"),
+            #platform.get_user_data_dir("mrbavii-mypim"),
             os.path.join(os.path.dirname(__file__), "data")
         )
 
