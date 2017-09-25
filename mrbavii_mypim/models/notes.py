@@ -153,13 +153,67 @@ class NotesModel(Model):
             raise Error(str(e))
 
     def move_note(self, path, new_parent):
-        pass
+        """ Move a note to a new parent. """
+        new_path = tuple(new_parent) + (path[-1],)
+
+        (o_dir, _) = self._get_note_dir_file(path)
+        (n_dir, _) = self._get_note_dir_file(new_path)
+
+        if os.path.exists(n_dir):
+            raise Error("Destination already exists")
+
+        try:
+            os.rename(o_dir, n_dir)
+        except (IOError, OSError) as e:
+            raise Error(str(e))
+
+        return new_path
 
     def rename_note(self, path, new_name):
-        pass
+        """ Rename a note in the current path. """
+        new_path = tuple(path[:-1]) + (new_name,)
 
-    def delete_note(self, path):
-        pass
+        (o_dir, _) = self._get_note_dir_file(path)
+        (n_dir, _) = self._get_note_dir_file(new_path)
+
+        if os.path.exists(n_dir):
+            raise Error("Destination already exists")
+
+        try:
+            os.rename(o_dir, n_dir)
+        except (IOError, OSError) as e:
+            raise Error(str(e))
+
+        return new_path
+
+    def delete_note(self, path, usetrash=True):
+        """ Delete a note. """
+        (o_dir, _) = self._get_note_dir_file(path)
+
+        if (not usetrash) or path[0].lower() == "trash":
+            # If deleting from trash, really delete it
+            # If not using trash, really delete it
+            try:
+                os.removedirs(o_dir)
+                return
+            except (IOError, OSError) as e:
+                raise Error(str(e))
+        else:
+            # Else, move the note to the "trash"
+            for i in range(1000):
+                new_path = ("trash", path[-1] + (str(i) if i > 0 else ""))
+        
+                (n_dir, _) = self._get_note_dir_file(new_path)
+
+                if not os.path.exists(n_dir):
+                    try:
+                        os.rename(o_dir, n_dir)
+                        return new_path
+                    except (IOError, OSError) as e:
+                        raise Error(str(e))
+            else:
+                raise Error("Trash is full.")
+
 
     def parse_note(self, path):
         """ Parse note into HTML. """
