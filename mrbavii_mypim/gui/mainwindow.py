@@ -34,11 +34,8 @@ class MainWindow(wx.Frame):
 
         for view in views.all_views:
             view_window = view(self.views, self._pim)
-            view_bitmap = wx.BitmapFromIcon(view_window.GetIcon())
+            view_bitmap = wx.ArtProvider.GetBitmap(view.VIEW_ICON, size=(32, 32))
             self.views.AddPage(view_window, view.VIEW_NAME, view_bitmap)
-
-        for i in range(50):
-            self.views.AddPage(wx.Panel(self.views, wx.ID_ANY), "Test", view_bitmap)
 
         # Top sizer
         border= wx.SizerFlags.GetDefaultBorder()

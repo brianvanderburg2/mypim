@@ -9,18 +9,20 @@ import os
 import wx
 import wx.html # Notes mention this should be imported before the wx.App is created
 
+from mrbaviirc.gui.wx.art import ArtProvider
+
 from .mainwindow import MainWindow
-from .art import ArtProvider
 
 class App(wx.App):
     def OnInit(self):
         # Set up common stuff
         self.SetAppName("mrbavii-mypim")
+        self.SetAppDisplayName("MrBavii MyPIM")
 
         # Check for a single instance
         self.instance = wx.SingleInstanceChecker(self.GetAppName())
         if self.instance.IsAnotherRunning():
-            wx.MessageBox("Another instance of {0} is running.".format(self.GetAppName()), "ERROR")
+            wx.MessageBox("Another instance of {0} is running.".format(self.GetAppName()), "Error")
             return False
 
         # Create our art provider

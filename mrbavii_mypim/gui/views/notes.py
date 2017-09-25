@@ -13,19 +13,13 @@ from .view import View
 
 class NotesView(View):
     VIEW_NAME = "Notes"
+    VIEW_ICON = "notes"
 
     def __init__(self, parent, pim):
         View.__init__(self, parent, pim)
         self._model = pim.get_model("notes")
 
-        self._pim.add_listener("view-restore", self.OnViewRestore)
-        self._pim.add_listener("view-save", self.OnViewSave)
-
         self.InitGui()
-
-    def GetIcon(self):
-        return wx.ArtProvider.GetIcon("notes", size=(32, 32))
-
 
     def InitGui(self):
         # Create the basic GUI
@@ -119,17 +113,11 @@ class NotesView(View):
 
         self.tree.DeleteChildren(item)
 
-    def OnViewRestore(self):
-        config = wx.Config.Get()
-        changer = wx.ConfigPathChanger(config, "/Views/Notes/")
+    def DoViewRestore(self, config):
         position = config.ReadInt("SashPosition", 40)
         self.splitter.SetSashPosition(position)
 
-    def OnViewSave(self):
-
-        config = wx.Config.Get()
-        changer = wx.ConfigPathChanger(config, "/Views/Notes/")
-
+    def DoViewSave(self, config):
         config.WriteInt("SashPosition", self.splitter.GetSashPosition())
 
 
