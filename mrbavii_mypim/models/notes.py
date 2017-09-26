@@ -19,6 +19,7 @@ that directory as all attachments and sub-notes are part of the directory.
 import os
 import re
 import io
+import shutil
 
 try:
     from xml.etree import cElementTree as ET
@@ -116,7 +117,7 @@ class NotesModel(Model):
         return directory
 
     def create_note(self, path):
-        """ Create a new note under parent. """
+        """ Create a new note. """
         (directory, file) = self._get_note_dir_file(path)
         if os.path.isfile(file):
             raise Error("Note already exists")
@@ -124,15 +125,20 @@ class NotesModel(Model):
         try:
             os.makedirs(directory)
             with io.open(file, "wt", newline=None) as handle:
-                handle.write("<note></note>")
+                handle.write(u"<note></note>")
         except (IOError, OSError) as e:
             raise Error(str(e))
+
+        return path
 
     def read_note(self, path):
         """ Read a given note based on the fullpath name. """
         (directory, file) = self._get_note_dir_file(path)
         if not os.path.isfile(file):
             raise Error("Note does not exist.")
+
+        if not os.path.exists(file):
+            return ""
 
         try:
             with io.open(file, "rt", newline=None) as handle:
@@ -186,34 +192,15 @@ class NotesModel(Model):
 
         return new_path
 
-    def delete_note(self, path, usetrash=True):
+    def delete_note(self, path):
         """ Delete a note. """
         (o_dir, _) = self._get_note_dir_file(path)
 
-        if (not usetrash) or path[0].lower() == "trash":
-            # If deleting from trash, really delete it
-            # If not using trash, really delete it
-            try:
-                os.removedirs(o_dir)
-                return
-            except (IOError, OSError) as e:
-                raise Error(str(e))
-        else:
-            # Else, move the note to the "trash"
-            for i in range(1000):
-                new_path = ("trash", path[-1] + (str(i) if i > 0 else ""))
-        
-                (n_dir, _) = self._get_note_dir_file(new_path)
-
-                if not os.path.exists(n_dir):
-                    try:
-                        os.rename(o_dir, n_dir)
-                        return new_path
-                    except (IOError, OSError) as e:
-                        raise Error(str(e))
-            else:
-                raise Error("Trash is full.")
-
+        try:
+            shutil.rmtree(o_dir)
+            return
+        except (IOError, OSError) as e:
+            raise Error(str(e))
 
     def parse_note(self, path):
         """ Parse note into HTML. """
