@@ -5,12 +5,59 @@ __copyright__   =   "Copyright (C) 2017 Brian Allen Vanderburg II"
 __license__     =   "Apache License 2.0"
 
 
+import os
+
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
+
 import wx
 import wx.html
 
 from .view import View
 from ...errors import Error
 
+# The best visual seems to come from using actual DnD:
+
+class NotesDataObject(wx.CustomDataObject):
+    FORMAT = "{0}-mrbavii-mypim-notes".format(os.getpid())
+
+    def __init__(self):
+        wx.CustomDataObject.__init__(self, wx.CustomDataFormat(self.FORMAT))
+        self.SetObject(None)
+
+    def SetObject(self, path):
+        self.SetData(pickle.dumps(path))
+
+    def GetObject(self):
+        return pickle.loads(self.GetData())
+
+
+class NotesDropTarget(wx.PyDropTarget):
+    def __init__(self, win):
+        wx.PyDropTarget.__init__(self)
+        self.win = win
+
+        self.data = NotesDataObject()
+        self.SetDataObject(self.data)
+
+    def OnDragOver(self, x, y, d):
+        return d
+
+    def OnDrop(self, x, y):
+        return True
+
+    def OnData(self, x, y, d):
+        if not self.GetData():
+            return d
+
+        source_note = self.data.GetObject()
+        if not source_note:
+            return d
+
+        self.win.OnNoteDrop(x, y, source_note)
+        return d
 
 class NotesView(View):
     VIEW_NAME = "Notes"
@@ -20,6 +67,7 @@ class NotesView(View):
         View.__init__(self, parent, pim)
         self._model = pim.get_model("notes")
         self._current_note = None
+        self._drag_item = None
 
         self.InitGui()
 
@@ -28,6 +76,7 @@ class NotesView(View):
         self.splitter = wx.SplitterWindow(self)
 
         self.tree = wx.TreeCtrl(self.splitter, wx.ID_ANY, style=wx.TR_HIDE_ROOT | wx.TR_HAS_BUTTONS | wx.TR_LINES_AT_ROOT)
+        self.tree.SetDropTarget(NotesDropTarget(self))
         self.tabs = wx.Notebook(self.splitter, wx.ID_ANY)
 
         self.view = wx.html.HtmlWindow(self.tabs, wx.ID_ANY)
@@ -43,6 +92,14 @@ class NotesView(View):
         sizer.Add(self.splitter, 1, wx.EXPAND | wx.ALL, 5)
         self.SetSizerAndFit(sizer)
 
+        # Image lists
+        (sx, sy) = (16, 16) # No system metric
+        il = wx.ImageList(sx, sy)
+        bmp = wx.ArtProvider.GetBitmap("notes", size=(sx, sy))
+        il.Add(bmp)
+
+        self.tree.AssignImageList(il)
+
 
         # Events
         self.Bind(wx.html.EVT_HTML_LINK_CLICKED, self.OnLinkClick)
@@ -51,6 +108,8 @@ class NotesView(View):
         self.Bind(wx.EVT_TREE_ITEM_EXPANDING, self.OnNoteExpand, self.tree)
         self.Bind(wx.EVT_TREE_ITEM_COLLAPSED, self.OnNoteCollapse, self.tree)
         self.Bind(wx.EVT_CONTEXT_MENU, self.OnNoteMenu, self.tree)
+        self.Bind(wx.EVT_TREE_BEGIN_DRAG, self.OnNoteBeginDrag, self.tree)
+        #self.Bind(wx.EVT_TREE_END_DRAG, self.OnNoteEndDrag, self.tree)
         
         # Create our popup menu
         menu = self.treeMenu = wx.Menu()
@@ -78,7 +137,7 @@ class NotesView(View):
         children = self._model.get_children(note)
         for child in children:
             name = child[-1]
-            child_item = self.tree.AppendItem(item, name, data=wx.TreeItemData(child))
+            child_item = self.tree.AppendItem(item, name, 0, 0, data=wx.TreeItemData(child))
             has_children = self._model.get_children(child)
             self.tree.SetItemHasChildren(child_item, len(has_children) > 0)
         self.tree.SortChildren(item)
@@ -181,6 +240,44 @@ class NotesView(View):
     def OnNoteMenu(self, evt):
         self.PopupMenu(self.treeMenu)
 
+    def OnNoteBeginDrag(self, evt):
+        if not self.QuerySave():
+            return
+
+        item = evt.GetItem()
+        if not item.IsOk() or item == self.tree.GetRootItem():
+            return
+
+        data = self.tree.GetItemData(item)
+        if not data:
+            return
+
+        note = data.GetData()
+        if not note:
+            return
+
+        # Begin DnD:
+        data = NotesDataObject()
+        data.SetObject(note)
+
+        src = wx.DropSource(self.tree)
+        src.SetData(data)
+
+        result = src.DoDragDrop(wx.Drag_DefaultMove)
+
+    def OnNoteDrop(self, x, y, source):
+        (target, flags) = self.tree.HitTest((x, y))
+        if target.IsOk():
+            data = self.tree.GetItemData(target)
+            if data:
+                target_note = data.GetData()
+                if target_note:
+                    print(source)
+                    print(target_note)
+        else:
+            print(source)
+            print("Root")
+
     def OnNewRoot(self, evt):
         if not self.QuerySave():
             return
@@ -225,7 +322,7 @@ class NotesView(View):
             wx.LogError(str(e))
             return
 
-        child = self.tree.AppendItem(parent, newname, data=wx.TreeItemData(newnote))
+        child = self.tree.AppendItem(parent, newname, 0, 0, data=wx.TreeItemData(newnote))
         self.tree.SortChildren(parent)
         self.tree.SelectItem(child)
             
