@@ -129,17 +129,20 @@ class NotesView(View):
 
     def PopulateTree(self, item):
         # Determine the items note
-        data = self.tree.GetItemData(item)
-        if not data:
+        note = self.tree.GetItemPyData(item)
+        if note is None: # Item may be an empty tuple
             return
 
-        note = data.GetData()
         children = self._model.get_children(note)
         for child in children:
             name = child[-1]
-            child_item = self.tree.AppendItem(item, name, 0, 0, data=wx.TreeItemData(child))
+
+            child_item = self.tree.AppendItem(item, name, 0, 0)
+            self.tree.SetItemPyData(child_item, child)
+
             has_children = self._model.get_children(child)
             self.tree.SetItemHasChildren(child_item, len(has_children) > 0)
+
         self.tree.SortChildren(item)
 
     def RefreshTree(self):
@@ -147,7 +150,8 @@ class NotesView(View):
         self.tree.DeleteAllItems()
 
         root_note = ()
-        root_item = self.tree.AddRoot("Notes", data=wx.TreeItemData(root_note))
+        root_item = self.tree.AddRoot("Notes")
+        self.tree.SetItemPyData(root_item, root_note)
         self.PopulateTree(root_item)
 
     def QuerySave(self):
@@ -214,14 +218,9 @@ class NotesView(View):
             return
 
         # TreeItemData from tree
-        note = self.tree.GetItemData(item)
-        if not note:
-            return
-
-        # Data from tree item data
-        note = note.GetData()
-
-        self.ShowNote(note)
+        note = self.tree.GetItemPyData(item)
+        if note:
+            self.ShowNote(note)
 
     def OnNoteExpand(self, evt):
         item = evt.GetItem()
@@ -248,11 +247,7 @@ class NotesView(View):
         if not item.IsOk() or item == self.tree.GetRootItem():
             return
 
-        data = self.tree.GetItemData(item)
-        if not data:
-            return
-
-        note = data.GetData()
+        note = self.tree.GetItemPyData(item)
         if not note:
             return
 
@@ -268,12 +263,10 @@ class NotesView(View):
     def OnNoteDrop(self, x, y, source):
         (target, flags) = self.tree.HitTest((x, y))
         if target.IsOk():
-            data = self.tree.GetItemData(target)
-            if data:
-                target_note = data.GetData()
-                if target_note:
-                    print(source)
-                    print(target_note)
+            target_note = self.tree.GetItemPyData(target)
+            if target_note:
+                print(source)
+                print(target_note)
         else:
             print(source)
             print("Root")
@@ -291,11 +284,7 @@ class NotesView(View):
         self.DoNewNote(self.tree.GetSelection())
 
     def DoNewNote(self, parent):
-        data = self.tree.GetItemData(parent)
-        if not data:
-            return
-
-        parent_note = data.GetData()
+        parent_note = self.tree.GetItemPyData(parent)
         if parent_note is None:
             return
         
@@ -322,22 +311,17 @@ class NotesView(View):
             wx.LogError(str(e))
             return
 
-        child = self.tree.AppendItem(parent, newname, 0, 0, data=wx.TreeItemData(newnote))
+        child = self.tree.AppendItem(parent, newname, 0, 0)
+        self.tree.SetItemPyData(child, newnote)
         self.tree.SortChildren(parent)
         self.tree.SelectItem(child)
             
-
-
     def OnRename(self, evt):
         item = self.tree.GetSelection()
         if not item or not item.IsOk():
             return
 
-        data = self.tree.GetItemData(item)
-        if not data:
-            return
-
-        note = data.GetData()
+        note = self.tree.GetItemPyData(item)
         if not note:
             return
 
@@ -357,12 +341,11 @@ class NotesView(View):
             return
 
         self.tree.CollapseAndReset(item)
-        self.tree.SetItemData(item, wx.TreeItemData(newnote))
+        self.tree.SetItemPyData(item, newnote)
         self.tree.SetItemText(item, newname)
 
         parent = self.tree.GetItemParent(item)
         self.tree.SortChildren(parent)
-
 
     def OnDelete(self, evt):
         if not self.QuerySave():
@@ -372,11 +355,7 @@ class NotesView(View):
         if not item or not item.IsOk():
             return
 
-        data = self.tree.GetItemData(item)
-        if not data:
-            return
-
-        note = data.GetData()
+        note = self.tree.GetItemPyData(item)
         if not note:
             return
 
