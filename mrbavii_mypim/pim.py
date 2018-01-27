@@ -6,6 +6,7 @@ __license__     =   "Apache License 2.0"
 
 
 import os
+import sqlite3
 
 from mrbaviirc.pattern.listener import ListenerMixin
 
@@ -36,7 +37,19 @@ class Pim(ListenerMixin):
         # Basic setup
         self._directory = directory
         self._progress_fn = None
+        self._log_fn = None
         self._models = {}
+
+        self._db = None
+        self._db_file = None
+        self._transaction_level = 0
+        self._error_in_trasaction = False
+
+        self._pim_settings = {}
+        self._schema_versions = {}
+
+        # Create/open the database
+        self._open()
 
         # Next open/create each model
         import models
@@ -103,4 +116,151 @@ class Pim(ListenerMixin):
     def get_cache_directory(self, model):
         """ Return a cache directory. """
         return os.path.join(self._directory, "cache", model.MODEL_NAME)
+
+    # Database related code
+    #######################
+    
+    def __enter__(self):
+        """ Begin a transaction, support nested context calls. """
+
+        if self._transaction_level == 0:
+            # Just now starting transaction
+            self._db.execute("BEGIN IMMEDIATE;")
+        else:
+            # Already in transaction, make a nested savepoint
+            self._db.execute("SAVEPOINT save;")
+        
+        self._transaction_level += 1
+        return self._db.cursor()
+
+    def __exit__(self, type, value, traceback):
+        """ Commit or rollback on leaving the context. """
+
+        self._transaction_level -= 1
+        if self._transaction_level == 0:
+            # Commit or rollback main transaction
+            if type is None:
+                self._db.execute("COMMIT;")
+            else:
+                self._db.execute("ROLLBACK;")
+        else:
+            # Release or rollback to the save point
+            if type is None:
+                self._db.execute("RELEASE save;")
+            else:
+                self._db.execute("ROLLBACK TO save;")
+
+        return False
+
+    def _open(self):
+        """ Open the database object. """
+        
+        self._db_file = os.path.join(self._directory, "pim.db")
+
+        # set isolation_level=None to avoid exec auto-begin/auto-commit
+        self._db = sqlite3.connect(
+            self._db_file,
+            isolation_level=None)
+
+        self._db.row_factory = sqlite3.Row
+
+        # Issue any pragmas needed
+        self._db.execute("PRAGMA foreign_keys=1;")
+
+        # Create our main tables
+        with self:
+            self._upgrade_tables()
+
+    def get_schema_version(self, name):
+        """ Get an object/schema version. """
+        version = self._schema_versions.get(name)
+        if version is not None:
+            return int(version)
+        return None
+
+    def set_schema_version(self, name, version):
+        """ Set an object/schema version. """
+        with self as cursor:
+            if version is None:
+                cursor.execute(
+                    """DELETE FROM
+                        schema_versions
+                    WHERE
+                        name=?;""",
+                    (name,)
+                )
+                self._schema_versions.pop(name, None)
+            else:
+                cursor.execute(
+                    """INSERT OR REPLACE INTO
+                        schema_versions (name, version)
+                    VALUES
+                        (?, ?);""",
+                    (name, int(version))
+                )
+                self._schema_versions[name] = int(version)
+            
+    def get_pim_setting(self, name):
+        """ Get a PIM setting. """
+        return self._pim_settings.get(name)
+
+    def set_pim_setting(self, name, value):
+        """ Set a PIM setting. """
+        with self as cursor:
+            if value is None:
+                cursor.execute(
+                    """DELETE FROM
+                        pim_settings
+                    WHERE
+                        name=?;""",
+                    (name,)
+                )
+                self._pim_settings.pop(name, None)
+            else:
+                cursor.execute(
+                    """INSERT OR REPLACE INTO
+                        pim_settings (name, value)
+                    VALUES
+                        (?, ?);""",
+                    (name, value)
+                )
+                self._pim_settings[name] = value
+
+    def _upgrade_tables(self):
+        """ Create and/or upgrade the base tables. """
+
+        with self as cursor:
+            # Create tables
+            cursor.execute(
+                """CREATE TABLE IF NOT EXISTS pim_settings(
+                    name TEXT UNIQUE,
+                    value TEXT
+                );"""
+            )
+
+            cursor.execute(
+                """CREATE TABLE IF NOT EXISTS schema_versions(
+                    name TEXT UNIQUE,
+                    version INTEGER
+                );"""
+            )
+
+            # load PIM settings
+            cursor.execute(
+                "SELECT name,value FROM pim_settings;"
+            )
+            for row in cursor:
+                self._settings[row["name"]] = row["value"]
+
+            # load schema versions
+            cursor.execute(
+                "SELECT name,version FROM schema_versions;"
+            )
+            for row in cursor:
+                self._schema_versions[row["name"]] = row["version"]
+
+            cursor.close()
+
+            # Set table versions
+            self.set_schema_version("main", 1)
 
