@@ -24,5 +24,5 @@ tarball: check
 
 .PHONY: run
 run:
-	python -B -m mrbavii_mypim.main
+	python -B -m mrbavii_mypim
 
