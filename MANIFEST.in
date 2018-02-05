@@ -1,0 +1,3 @@
+recursive-include mrbavii_mypim/data *
+recursive-exclude mrbavii_mypim/data .*
+

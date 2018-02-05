@@ -8,7 +8,12 @@ __license__     =   "Apache License 2.0"
 import os
 import sqlite3
 
+import gzip
+import datetime
+import shutil
+
 from mrbaviirc.pattern.listener import ListenerMixin
+from mrbaviirc.util import FileMover
 
 from . import errors
 
@@ -117,6 +122,10 @@ class Pim(ListenerMixin):
         """ Return a cache directory. """
         return os.path.join(self._directory, "cache", model.MODEL_NAME)
 
+    def get_export_directory(self, model):
+        """ Return the export directory. """
+        return os.path.join(self._directory, "export", model.MODEL_NAME)
+
     # Database related code
     #######################
     
@@ -160,7 +169,8 @@ class Pim(ListenerMixin):
         # set isolation_level=None to avoid exec auto-begin/auto-commit
         self._db = sqlite3.connect(
             self._db_file,
-            isolation_level=None)
+            isolation_level=None,
+            cached_statements=1000)
 
         self._db.row_factory = sqlite3.Row
 
@@ -170,6 +180,38 @@ class Pim(ListenerMixin):
         # Create our main tables
         with self:
             self._upgrade_tables()
+
+    def backup(self):
+        """ Backup the current database file. """
+
+        # We must not be in a transaction
+        if self._transaction_level > 0:
+            pass # TODO: raise exception
+
+        try:
+            # Lock the database
+            self._db.execute("BEGIN IMMEDIATE;")
+
+            # Ensure backup directory exists
+            backup_directory = os.path.join(self._directory, "backups")
+
+            if not os.path.exists(backup_directory):
+                os.makedirs(backup_directory)
+
+            # Backup filename based on time
+            now = datetime.datetime.utcnow()
+            backup_basename = now.strftime("%Y%m%d-%H%M%S") + ".gz"
+            backup_filename = os.path.join(backup_directory, backup_basename)
+
+            # Compress as we back up
+            with FileMover(backup_filename, backup_filename + ".tmp") as mover:
+                with gzip.GzipFile(backup_filename + ".tmp", "wb", 9) as gzfile:
+                    with open(self._db_file, "rb") as dbfile:
+                        shutil.copyfileobj(dbfile, gzfile)
+
+                mover.commit()
+        finally:
+            self._db.execute("ROLLBACK;")
 
     def get_schema_version(self, name):
         """ Get an object/schema version. """
