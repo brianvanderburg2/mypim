@@ -11,6 +11,8 @@ import wx
 import wx.html # Notes mention this should be imported before the wx.App is created
 
 from mrbaviirc import platform
+from mrbaviirc import app
+
 from mrbaviirc.gui.wx.art import ArtProvider
 
 from .mainwindow import MainWindow
@@ -18,15 +20,21 @@ from .mainwindow import MainWindow
 from ..pim import Pim
 
 
-class App(wx.App):
+class GuiApp(wx.App):
+
+    def __init__(self, app):
+        self._app = app
+
+        # Needs to be called last b/c it calls OnInit
+        wx.App.__init__(self)
+
     def OnInit(self):
         # Set up common stuff
-        self.SetAppName("mrbavii-mypim")
-        self.SetAppDisplayName("MrBavii MyPIM")
-
+        self.SetAppName(self._app.appname)
+        self.SetAppDisplayName(self._app.displayname)
 
         # directory setup
-        self._path = platform.Path("mrbavii-mypim")
+        self._path = self._app.traits.path
 
         confdir = self._path.get_user_config_dir()
         if not os.path.isdir(confdir):
@@ -107,8 +115,27 @@ class App(wx.App):
     def Upgrade(self, pim):
         pass
 
-        
+
+class App(app.App):
+
+    @property
+    def appname(self):
+        return "mrbavii-mypim"
+
+    @property
+    def displayname(self):
+        return "MrBAVII MyPIM"
+
+    @property
+    def description(self):
+        return "A personal information manager."
+
+    def main(self):
+        guiapp = GuiApp(self)
+        guiapp.MainLoop()
+
+
 def main():
     app = App()
-    app.MainLoop()
+    app.execute()
 
