@@ -9,14 +9,12 @@ import wx
 
 from mrbaviirc.gui.wx import bookctrl
 
-from ..pim import Pim
-
 class MainWindow(wx.Frame):
 
-    def __init__(self, directory):
-        wx.Frame.__init__(self, None, wx.ID_ANY, "Main Window")
+    def __init__(self, pim):
+        wx.Frame.__init__(self, None, wx.ID_ANY, wx.GetApp().GetAppDisplayName() + " : " + pim.get_directory())
 
-        self._pim = Pim(directory)
+        self._pim = pim
         self.InitGui()
 
     def InitGui(self):

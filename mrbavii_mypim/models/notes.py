@@ -30,7 +30,7 @@ from mrbaviirc import template
 from mrbaviirc.template.lib.xml import ElementTreeWrapper
 
 from .. import util
-from .model import Model
+from .model import Model, ModelInstaller
 from ..errors import Error
 
 class NotesModel(Model):
@@ -47,11 +47,15 @@ class NotesModel(Model):
         Model.__init__(self, pim)
         self._directory = pim.get_storage_directory(self)
 
+    def open(self):
         if not os.path.isdir(self._directory):
             try:
                 os.makedirs(self._directory)
             except (IOError, OSError) as e:
                 raise Error(str(e))
+
+        installer = NotesModelInstaller(self)
+        installer.install()
 
     def valid_name(self, name):
         """ Determine if a name is valid. """
@@ -229,4 +233,11 @@ class NotesModel(Model):
             raise Error(str(e))
 
         return renderer.get()
+
+
+class NotesModelInstaller(ModelInstaller):
+    """ Handle install/upgrades for the notes model. """
+
+    _install_map = {
+    }
 

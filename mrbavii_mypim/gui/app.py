@@ -4,14 +4,19 @@ __author__      =   "Brian Allen Vanderburg II"
 __copyright__   =   "Copyright (C) 2017 Brian Allen Vanderburg II"
 __license__     =   "Apache License 2.0"
 
+import sys
 import os
 
 import wx
 import wx.html # Notes mention this should be imported before the wx.App is created
 
+from mrbaviirc import platform
 from mrbaviirc.gui.wx.art import ArtProvider
 
 from .mainwindow import MainWindow
+
+from ..pim import Pim
+
 
 class App(wx.App):
     def OnInit(self):
@@ -19,26 +24,40 @@ class App(wx.App):
         self.SetAppName("mrbavii-mypim")
         self.SetAppDisplayName("MrBavii MyPIM")
 
-        # Check for a single instance
-        self.instance = wx.SingleInstanceChecker(self.GetAppName())
-        if self.instance.IsAnotherRunning():
-            wx.MessageBox("Another instance of {0} is running.".format(self.GetAppName()), "Error")
-            return False
+
+        # directory setup
+        self._path = platform.Path("mrbavii-mypim")
+
+        confdir = self._path.get_user_config_dir()
+        if not os.path.isdir(confdir):
+            os.makedirs(confdir)
+
+        # TODO: wxStandardPaths wrapper around platform.Path
 
         # Create our art provider
         art = ArtProvider(
             os.path.join(
-                os.path.dirname(__file__),
-                "..", "data", "icons"
+                self._path.get_package_data_dir(
+                    sys.modules[".".join(__name__.split('.')[:-2])], all=False
+                ),
+                "icons"
             )
         )
         wx.ArtProvider.Push(art)
 
-        # Standard paths
-        paths = wx.StandardPaths.Get()
-
         # Create the Config object
-        config = wx.FileConfig(self.GetAppName(), self.GetVendorName())
+        # TODO: Create a custom config object in mrbaviirc, then
+        # a wxConfigBase wrapper around it
+        config = wx.FileConfig(
+            self.GetAppName(),
+            self.GetVendorName(),
+            os.path.join(
+                self._path.get_user_config_dir(),
+                "mypim.conf"
+            ),
+            wx.EmptyString,
+            wx.CONFIG_USE_LOCAL_FILE
+        )
         wx.Config.Set(config)
 
         # Show launcher or open previous PIM
@@ -49,14 +68,24 @@ class App(wx.App):
             return self.Launcher()
 
     def Open(self, directory):
-        import os
 
         if not os.path.isdir(directory):
             return False
 
-        from .mainwindow import MainWindow
+        # Open the PIM, showing a progrss dialog
+        dlg = wx.ProgressDialog("Open", "Opening " + directory)
+        def progress_callback(msg, pct):
+            dlg.Pulse()
 
-        window = MainWindow(directory)
+        pim = Pim(directory)
+        pim.register_progress_function(progress_callback)
+        pim.open()
+
+        pim.register_progress_function(None)
+        dlg.Destroy()
+
+        # Create and show the main window
+        window = MainWindow(pim)
         
         window.Show(True)
         self.SetTopWindow(window)
@@ -74,6 +103,9 @@ class App(wx.App):
         else:
             launcher.Destroy
             return False
+
+    def Upgrade(self, pim):
+        pass
 
         
 def main():

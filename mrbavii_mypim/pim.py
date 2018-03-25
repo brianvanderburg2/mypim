@@ -35,7 +35,7 @@ class Pim(ListenerMixin):
     """
 
     def __init__(self, directory):
-        """ Create/open a PIM associated with a given directory. """
+        """ Create a PIM associated with a given directory. """
 
         ListenerMixin.__init__(self)
 
@@ -51,14 +51,9 @@ class Pim(ListenerMixin):
         self._error_in_trasaction = False
 
         self._pim_settings = {}
-        self._schema_versions = {}
+        self._model_versions = {}
 
-        # Create/open the database
-        self._open()
-
-        # Next open/create each model
-        import models
-
+        from . import models
         for model in models.all_models:
             self._models[model.MODEL_NAME] = model(self)
 
@@ -66,14 +61,18 @@ class Pim(ListenerMixin):
         """ Return the instance for a given model. """
         return self._models.get(name, None)
 
+    def _db_progress_handler(self):
+        """ Called by sqlite3 every so many instructions. """
+        self.call_progress_function(None, None)
+
     def register_progress_function(self, callback=None):
         """ Register a progress function.
             The progress function can take two arguments.
-                1. A message to be displayed
-                2. A percentage of completion.
+                1. A message to be displayed, can be empty string/None
+                2. A percentage of completion, can be None if unknown
             The progress function can return:
                 True for the caller to continue
-                False for the caller to abort
+                False for the caller to abort if possible.
         """
         self._progress_fn = callback
 
@@ -145,48 +144,93 @@ class Pim(ListenerMixin):
     def __exit__(self, type, value, traceback):
         """ Commit or rollback on leaving the context. """
 
-        self._transaction_level -= 1
-        if self._transaction_level == 0:
+        if self._transaction_level == 1:
             # Commit or rollback main transaction
             if type is None:
-                self._db.execute("COMMIT;")
+                try:
+                    self._db.execute("COMMIT;")
+                    self._transaction_level -= 1
+                except: # TODO: specify exception type
+                    self._db.execute("ROLLBACK;")
+                    self._transaction_level -= 1
+                    raise
             else:
                 self._db.execute("ROLLBACK;")
+                self._transaction_level -= 1
         else:
             # Release or rollback to the save point
             if type is None:
-                self._db.execute("RELEASE save;")
+                try:
+                    self._db.execute("RELEASE save;")
+                    self._transaction_level -= 1
+                except: # TODO: specify exception type
+                    self._db.execute("ROLLBACK to save;")
+                    self._transaction_level -= 1
+                    raise
             else:
                 self._db.execute("ROLLBACK TO save;")
+                self._transaction_level -= 1
 
+        # If an exception was passed in, reraise it
         return False
 
-    def _open(self):
-        """ Open the database object. """
+    def open(self):
+        """ Open the PIM, database, and models. """
         
         self._db_file = os.path.join(self._directory, "pim.db")
 
-        # set isolation_level=None to avoid exec auto-begin/auto-commit
+        # Set isolation_level=None to avoid exec auto-begin/auto-commit
         self._db = sqlite3.connect(
             self._db_file,
             isolation_level=None,
             cached_statements=1000)
 
         self._db.row_factory = sqlite3.Row
+        self._db.set_progress_handler(self._db_progress_handler, 10000)
 
         # Issue any pragmas needed
         self._db.execute("PRAGMA foreign_keys=1;")
 
-        # Create our main tables
-        with self:
-            self._upgrade_tables()
+        # We require model_versions before installing
+        with self as cursor:
+            cursor.execute(
+                """CREATE TABLE IF NOT EXISTS model_versions(
+                    name TEXT UNIQUE,
+                    version INTEGER
+                );"""
+            )
+            cursor.execute(
+                "SELECT name,version FROM model_versions;"
+            )
+            for row in cursor:
+                self._model_versions[row["name"]] = row["version"]
+
+            cursor.close()
+
+        # Install/upgrade
+        installer = PimInstaller(self)
+        installer.install()
+
+        # Load PIM settings
+        with self as cursor:
+            cursor.execute(
+                "SELECT name,value FROM pim_settings;"
+            )
+            for row in cursor:
+                self._settings[row["name"]] = row["value"]
+            cursor.close()
+
+        # Next open/create each model
+        from . import models
+        for model in models.all_models:
+            self._models[model.MODEL_NAME].open()
 
     def backup(self):
         """ Backup the current database file. """
 
         # We must not be in a transaction
         if self._transaction_level > 0:
-            pass # TODO: raise exception
+            raise Error("Backup cannot be complete while a transaction is in progress.")
 
         try:
             # Lock the database
@@ -213,34 +257,34 @@ class Pim(ListenerMixin):
         finally:
             self._db.execute("ROLLBACK;")
 
-    def get_schema_version(self, name):
-        """ Get an object/schema version. """
-        version = self._schema_versions.get(name)
+    def get_model_version(self, name):
+        """ Get a model version. """
+        version = self._model_versions.get(name)
         if version is not None:
             return int(version)
         return None
 
-    def set_schema_version(self, name, version):
-        """ Set an object/schema version. """
+    def set_model_version(self, name, version):
+        """ Set a model version. """
         with self as cursor:
             if version is None:
                 cursor.execute(
                     """DELETE FROM
-                        schema_versions
+                        model_versions
                     WHERE
                         name=?;""",
                     (name,)
                 )
-                self._schema_versions.pop(name, None)
+                self._model_versions.pop(name, None)
             else:
                 cursor.execute(
                     """INSERT OR REPLACE INTO
-                        schema_versions (name, version)
+                        model_versions (name, version)
                     VALUES
                         (?, ?);""",
                     (name, int(version))
                 )
-                self._schema_versions[name] = int(version)
+                self._model_versions[name] = int(version)
             
     def get_pim_setting(self, name):
         """ Get a PIM setting. """
@@ -268,11 +312,30 @@ class Pim(ListenerMixin):
                 )
                 self._pim_settings[name] = value
 
-    def _upgrade_tables(self):
-        """ Create and/or upgrade the base tables. """
 
-        with self as cursor:
-            # Create tables
+class PimInstaller(object):
+    """ Installer for the base PIM object. """
+    def __init__(self, pim):
+        self._pim = pim
+
+    def install(self):
+        """ Use the version map to execute the install fuctions. """
+        version = self._pim.get_model_version("main")
+        while True:
+            callback = self._install_map.get(version)
+            if callback:
+                version = callback(self)
+            else:
+                break
+        self._pim.set_model_version("main", version)
+
+    def do_install(self):
+        """ This is the main install. """
+        with self._pim as cursor:
+            # Note: model_versions never changes, just a name/version map
+            # and is created if it doesn't exist already on the datbase open
+
+            # pim_settings
             cursor.execute(
                 """CREATE TABLE IF NOT EXISTS pim_settings(
                     name TEXT UNIQUE,
@@ -280,29 +343,11 @@ class Pim(ListenerMixin):
                 );"""
             )
 
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS schema_versions(
-                    name TEXT UNIQUE,
-                    version INTEGER
-                );"""
-            )
+        # Installed to version 1
+        return 1
 
-            # load PIM settings
-            cursor.execute(
-                "SELECT name,value FROM pim_settings;"
-            )
-            for row in cursor:
-                self._settings[row["name"]] = row["value"]
+    _install_map = {
+        None: do_install
+    }
 
-            # load schema versions
-            cursor.execute(
-                "SELECT name,version FROM schema_versions;"
-            )
-            for row in cursor:
-                self._schema_versions[row["name"]] = row["version"]
-
-            cursor.close()
-
-            # Set table versions
-            self.set_schema_version("main", 1)
 
