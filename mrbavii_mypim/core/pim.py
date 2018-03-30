@@ -15,9 +15,8 @@ import shutil
 from mrbaviirc.pattern.listener import ListenerMixin
 from mrbaviirc.util import FileMover
 
-from . import errors
+from .. import errors
 
-from . import platform
 
 
 
@@ -108,7 +107,7 @@ class Pim(ListenerMixin):
         dirs = (
             os.path.join(self._directory, "data"),
             #platform.get_user_data_dir("mrbavii-mypim"),
-            os.path.join(os.path.dirname(__file__), "data")
+            os.path.join(os.path.dirname(__file__), "..", "data")
         )
 
         return dirs

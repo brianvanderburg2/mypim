@@ -29,9 +29,9 @@ except ImportError:
 from mrbaviirc import template
 from mrbaviirc.template.lib.xml import ElementTreeWrapper
 
-from .. import util
+from ... import util
 from .model import Model, ModelInstaller
-from ..errors import Error
+from ...errors import Error
 
 class NotesModel(Model):
     """ Represent a tree of notes. """
