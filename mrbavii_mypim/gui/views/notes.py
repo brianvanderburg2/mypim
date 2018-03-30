@@ -15,8 +15,10 @@ except ImportError:
 import wx
 import wx.html
 
+from mrbavii_mypim.core.errors import Error
+
 from .view import View
-from ...errors import Error
+
 
 # The best visual seems to come from using actual DnD:
 

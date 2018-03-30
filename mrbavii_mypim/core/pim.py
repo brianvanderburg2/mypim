@@ -15,7 +15,7 @@ import shutil
 from mrbaviirc.pattern.listener import ListenerMixin
 from mrbaviirc.util import FileMover
 
-from .. import errors
+from . import errors
 
 
 

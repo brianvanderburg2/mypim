@@ -10,14 +10,13 @@ import os
 import wx
 import wx.html # Notes mention this should be imported before the wx.App is created
 
-from mrbaviirc import platform
 from mrbaviirc import app
-
 from mrbaviirc.gui.wx.art import ArtProvider
+
+from mrbavii_mypim.core.pim import Pim
 
 from .mainwindow import MainWindow
 
-from ..pim import Pim
 
 
 class GuiApp(wx.App):
