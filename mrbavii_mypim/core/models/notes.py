@@ -35,6 +35,7 @@ from ..errors import Error
 class NotesModel(Model):
     """ Represent a tree of notes. """
     MODEL_NAME="notes"
+    MODEL_VERSION=1
     NOTE_FILENAME="contents.note"
 
     # Valid name regex uses a literal space character to match a space but
@@ -46,15 +47,15 @@ class NotesModel(Model):
         Model.__init__(self, pim)
         self._directory = pim.get_storage_directory(self)
 
+    def install(self):
+        return NotesModelInstaller(self).install()
+
     def open(self):
         if not os.path.isdir(self._directory):
             try:
                 os.makedirs(self._directory)
             except (IOError, OSError) as e:
                 raise Error(str(e))
-
-        installer = NotesModelInstaller(self)
-        installer.install()
 
     def valid_name(self, name):
         """ Determine if a name is valid. """
@@ -237,6 +238,25 @@ class NotesModel(Model):
 class NotesModelInstaller(ModelInstaller):
     """ Handle install/upgrades for the notes model. """
 
+    def install_tables(self):
+        with self._pim as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    parent INTEGER REFERENCES notes( id ),
+                    sortorder INTEGER DEFAULT 0,
+                    icon INTEGER DEFAULT 0,
+                    name TEXT,
+                    contents TEXT
+                );
+                """
+            );
+
+            self.set_version(1)
+
+
     _install_map = {
+        None: install_tables
     }
 

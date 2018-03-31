@@ -79,15 +79,20 @@ class GuiApp(wx.App):
         if not os.path.isdir(directory):
             return False
 
+        # Establish connection to PIM:
+        pim = Pim(directory)
+        pim.connect()
+
+        if pim.check_install():
+            pim.install() # TODO prompt user first, and wrap in progress dialog
+
         # Open the PIM, showing a progrss dialog
         dlg = wx.ProgressDialog("Open", "Opening " + directory)
         def progress_callback(msg, pct):
             dlg.Pulse()
 
-        pim = Pim(directory)
         pim.register_progress_function(progress_callback)
         pim.open()
-
         pim.register_progress_function(None)
         dlg.Destroy()
 

@@ -12,12 +12,12 @@ import gzip
 import datetime
 import shutil
 
+from collections import OrderedDict
+
 from mrbaviirc.pattern.listener import ListenerMixin
 from mrbaviirc.util import FileMover
 
 from . import errors
-
-
 
 
 class Error(errors.Error):
@@ -42,15 +42,12 @@ class Pim(ListenerMixin):
         self._directory = directory
         self._progress_fn = None
         self._log_fn = None
-        self._models = {}
+        self._models = OrderedDict()
 
         self._db = None
         self._db_file = None
         self._transaction_level = 0
         self._error_in_trasaction = False
-
-        self._pim_settings = {}
-        self._model_versions = {}
 
         from . import models
         for model in models.all_models:
@@ -171,11 +168,9 @@ class Pim(ListenerMixin):
                 self._transaction_level -= 1
 
         # If an exception was passed in, reraise it
-        return False
 
-    def open(self):
-        """ Open the PIM, database, and models. """
-        
+    def connect(self):
+        """ Establish the initial connection to the PIM. """
         self._db_file = os.path.join(self._directory, "pim.db")
 
         # Set isolation_level=None to avoid exec auto-begin/auto-commit
@@ -190,39 +185,36 @@ class Pim(ListenerMixin):
         # Issue any pragmas needed
         self._db.execute("PRAGMA foreign_keys=1;")
 
-        # We require model_versions before installing
+        # We require model_versions before anything else
         with self as cursor:
             cursor.execute(
-                """CREATE TABLE IF NOT EXISTS model_versions(
+                """
+                CREATE TABLE IF NOT EXISTS model_versions(
                     name TEXT UNIQUE,
                     version INTEGER
-                );"""
+                );
+                """
             )
-            cursor.execute(
-                "SELECT name,version FROM model_versions;"
-            )
-            for row in cursor:
-                self._model_versions[row["name"]] = row["version"]
-
             cursor.close()
 
-        # Install/upgrade
-        installer = PimInstaller(self)
-        installer.install()
+    def check_install(self):
+        """ Check if installation is o. """
+        for model in self._models:
+            if self._models[model].check_install():
+                return True
 
-        # Load PIM settings
-        with self as cursor:
-            cursor.execute(
-                "SELECT name,value FROM pim_settings;"
-            )
-            for row in cursor:
-                self._settings[row["name"]] = row["value"]
-            cursor.close()
+        return False
 
-        # Next open/create each model
-        from . import models
-        for model in models.all_models:
-            self._models[model.MODEL_NAME].open()
+    def install(self):
+        """ Run the installers. """
+        for model in self._models:
+            if self._models[model].check_install():
+                self._models[model].install()
+
+    def open(self):
+        """ Open the PIM """
+        for model in self._models:
+            self._models[model].open()
 
     def backup(self):
         """ Backup the current database file. """
@@ -258,9 +250,18 @@ class Pim(ListenerMixin):
 
     def get_model_version(self, name):
         """ Get a model version. """
-        version = self._model_versions.get(name)
-        if version is not None:
-            return int(version)
+        with self as cursor:
+            cursor.execute(
+                """
+                SELECT version FROM model_versions WHERE name=?;
+                """,
+                (name,)
+            )
+
+            row = cursor.fetchone()
+            if row:
+                return row["version"]
+
         return None
 
     def set_model_version(self, name, version):
@@ -268,85 +269,22 @@ class Pim(ListenerMixin):
         with self as cursor:
             if version is None:
                 cursor.execute(
-                    """DELETE FROM
+                    """
+                    DELETE FROM
                         model_versions
                     WHERE
-                        name=?;""",
+                        name=?;
+                    """,
                     (name,)
                 )
-                self._model_versions.pop(name, None)
             else:
                 cursor.execute(
-                    """INSERT OR REPLACE INTO
+                    """
+                    INSERT OR REPLACE INTO
                         model_versions (name, version)
                     VALUES
-                        (?, ?);""",
+                        (?, ?);
+                    """,
                     (name, int(version))
                 )
-                self._model_versions[name] = int(version)
-            
-    def get_pim_setting(self, name):
-        """ Get a PIM setting. """
-        return self._pim_settings.get(name)
-
-    def set_pim_setting(self, name, value):
-        """ Set a PIM setting. """
-        with self as cursor:
-            if value is None:
-                cursor.execute(
-                    """DELETE FROM
-                        pim_settings
-                    WHERE
-                        name=?;""",
-                    (name,)
-                )
-                self._pim_settings.pop(name, None)
-            else:
-                cursor.execute(
-                    """INSERT OR REPLACE INTO
-                        pim_settings (name, value)
-                    VALUES
-                        (?, ?);""",
-                    (name, value)
-                )
-                self._pim_settings[name] = value
-
-
-class PimInstaller(object):
-    """ Installer for the base PIM object. """
-    def __init__(self, pim):
-        self._pim = pim
-
-    def install(self):
-        """ Use the version map to execute the install fuctions. """
-        version = self._pim.get_model_version("main")
-        while True:
-            callback = self._install_map.get(version)
-            if callback:
-                version = callback(self)
-            else:
-                break
-        self._pim.set_model_version("main", version)
-
-    def do_install(self):
-        """ This is the main install. """
-        with self._pim as cursor:
-            # Note: model_versions never changes, just a name/version map
-            # and is created if it doesn't exist already on the datbase open
-
-            # pim_settings
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS pim_settings(
-                    name TEXT UNIQUE,
-                    value TEXT
-                );"""
-            )
-
-        # Installed to version 1
-        return 1
-
-    _install_map = {
-        None: do_install
-    }
-
 
