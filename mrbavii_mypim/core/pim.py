@@ -5,6 +5,7 @@ __copyright__   =   "Copyright (C) 2017 Brian Allen Vanderburg II"
 __license__     =   "Apache License 2.0"
 
 
+import sys
 import os
 import sqlite3
 
@@ -42,11 +43,13 @@ class Pim(ListenerMixin):
         self._directory = directory
         self._progress_fn = None
         self._log_fn = None
+        self._fatal_error_fn = None
         self._models = OrderedDict()
 
         self._db = None
         self._db_file = None
         self._transaction_level = 0
+        self._transation_cleanup_fns = []
         self._error_in_trasaction = False
 
         from . import models
@@ -95,6 +98,24 @@ class Pim(ListenerMixin):
         if self._log_fn:
             self._log_fn(level, source, message)
 
+    def register_fatal_error_function(self, callback=None):
+        """ Registers a function to call if a fatal error is caused
+            such as a failure to roll back a transaction in case of
+            a DB error. The application should always exit.
+            The function takes the following arguments:
+                1. A message
+        """
+        self._fatal_error_fn = callback
+
+    def call_fatal_error_function(self, message):
+        """ Call the fatal error function. """
+        if self._fatal_error_fn:
+            self._fatal_error_fn(message)
+        else:
+            print("Exiting due to fatal error: {}".format(message))
+
+        sys.exit(-1)
+
     def get_directory(self):
         """ Return the PIM directory. """
         return self._directory
@@ -123,16 +144,41 @@ class Pim(ListenerMixin):
 
     # Database related code
     #######################
+
+    def _perform_rollback(self):
+        """ Execute a rollback on the database, die if the command failed. """
+        try:
+            self._db.execute("ROLLBACK;")
+        except Exception as e:
+            # Fatal if rollback fails.  To prevent/minimize corruption, exit
+            try:
+                # Rollback failed, aborting so still clean up
+                for fn in self._transaction_cleanup_fns:
+                    fn()
+            finally:
+                self.call_fatal_error_function(str(e))
+                sys.exit(-1)
+
+        # Rollback successfull, cleanup
+        for fn in self._transaction_cleanup_fns:
+            fn()
+
+    def abort_transaction(self):
+        """ Set the error flag so the transaction is rolled back instead of commited. """
+        self._error_in_transaction = True
+
+    def register_transaction_cleanup_function(self, fn):
+        """ Regsiter a function to be called in case a transaction is rolled back. """
+        self._transaction_cleanup_fns.append(fn)
     
     def __enter__(self):
         """ Begin a transaction, support nested context calls. """
 
         if self._transaction_level == 0:
             # Just now starting transaction
+            self._error_in_transaction = False
+            self._transaction_cleanup_fns = []
             self._db.execute("BEGIN IMMEDIATE;")
-        else:
-            # Already in transaction, make a nested savepoint
-            self._db.execute("SAVEPOINT save;")
         
         self._transaction_level += 1
         return self._db.cursor()
@@ -140,33 +186,24 @@ class Pim(ListenerMixin):
     def __exit__(self, type, value, traceback):
         """ Commit or rollback on leaving the context. """
 
-        if self._transaction_level == 1:
-            # Commit or rollback main transaction
-            if type is None:
-                try:
-                    self._db.execute("COMMIT;")
-                    self._transaction_level -= 1
-                except: # TODO: specify exception type
-                    self._db.execute("ROLLBACK;")
-                    self._transaction_level -= 1
-                    raise
-            else:
-                self._db.execute("ROLLBACK;")
-                self._transaction_level -= 1
-        else:
-            # Release or rollback to the save point
-            if type is None:
-                try:
-                    self._db.execute("RELEASE save;")
-                    self._transaction_level -= 1
-                except: # TODO: specify exception type
-                    self._db.execute("ROLLBACK to save;")
-                    self._transaction_level -= 1
-                    raise
-            else:
-                self._db.execute("ROLLBACK TO save;")
-                self._transaction_level -= 1
+        if type is not None:
+            self._error_in_transaction = True
 
+        try:
+            if self._transaction_level == 1:
+                # Commit the transaction
+                if not self._error_in_transaction:
+                    try:
+                        self._db.execute("COMMIT;")
+                        self._transaction_cleanup_fns = []
+                    except:
+                        self._perform_rollback()
+                        raise
+                else:
+                    self._perform_rollback()
+        finally:
+            if self._transaction_level > 0: # In call __enter__ failed before incrementing
+                self._transaction_level -= 1
         # If an exception was passed in, reraise it
 
     def connect(self):
