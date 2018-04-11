@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages()
 
 setup(
     name='mrbavii_mypim',
@@ -7,7 +7,7 @@ setup(
     url='',
     author='Brian Allen Vanderburg II',
     license='MIT',
-    packages=['mrbavii_mypim'],
+    packages=find_packages(),
     zip_safe=False,
     install_package_data=True,
     entry_points = {
