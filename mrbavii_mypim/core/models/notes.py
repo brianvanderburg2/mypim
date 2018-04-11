@@ -264,3 +264,6 @@ class NotesModelInstaller(ModelInstaller):
         None: install_tables
     }
 
+# Specify the models to the loader
+MODELS = [NotesModel]
+

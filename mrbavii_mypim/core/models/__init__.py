@@ -8,22 +8,10 @@ __license__     =   "Apache License 2.0"
 __all__ = ["all_models", "models_map"]
 
 from mrbaviirc.util.sort import depends_sort
+from mrbaviirc.util.imp import import_submodules_symbolref
 
-from ..errors import Error
-
-from .model import Model
-
-# Import others in order for them to be registered.
-from .main import MainModel
-from .notes import NotesModel
-
-
-# All models
-all_models = (
-    MainModel,
-    NotesModel
-)
-
+# Import all submodules and get the MODELS from each
+all_models = import_submodules_symbolref(__package__, "MODELS", recursive=False)
 models_map = { i.MODEL_NAME: i for i in all_models }
 
 # Update the all_models tuple to be sorted
