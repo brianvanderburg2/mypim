@@ -8,7 +8,7 @@ __license__     =   "Apache License 2.0"
 import sys
 import os
 import sqlite3
-
+import argparse
 import gzip
 import datetime
 import shutil
@@ -17,6 +17,7 @@ from collections import OrderedDict
 
 from mrbaviirc.pattern.listener import ListenerMixin
 from mrbaviirc.util import FileMover
+from mrbaviirc import app
 
 from . import errors
 
@@ -34,12 +35,13 @@ class Pim(ListenerMixin):
     methods.
     """
 
-    def __init__(self, directory):
+    def __init__(self, app, directory):
         """ Create a PIM associated with a given directory. """
 
         ListenerMixin.__init__(self)
 
         # Basic setup
+        self._app = app
         self._directory = directory
         self._progress_fn = None
         self._log_fn = None
@@ -56,9 +58,32 @@ class Pim(ListenerMixin):
         for model in models.all_models:
             self._models[model.MODEL_NAME] = model(self)
 
+    def isreal(self):
+        """ Return if  the PIM is real.  A real PIM has an associated
+            directory and database.  An unreal PIM has no directory or
+            database and is just used for callin the entry points. """
+        return self._directory is not None
+
     def get_model(self, name):
         """ Return the instance for a given model. """
         return self._models.get(name, None)
+
+    def get_model_entries(self):
+        """ Return all available entry points. """
+        entries = []
+        for model in self._models:
+            entries.extend(self._models[model].get_entries())
+
+        return entries
+
+    def call_model_entry(self, entry, params):
+        """ Call an entry point. """
+        for model in self._models:
+            if entry in self._models[model].get_entries():
+                return self._models[model].call_entry(entry, params)
+
+        raise Error("No such entry: {}".format(entry))
+
 
     def _db_progress_handler(self):
         """ Called by sqlite3 every so many instructions. """
@@ -324,4 +349,75 @@ class Pim(ListenerMixin):
                     """,
                     (name, int(version))
                 )
+
+class PimApp(app.App):
+    """ A base application object for the PIM. """
+
+    @property
+    def appname(self):
+        return "mrbavii-mypim"
+
+    @property
+    def displayname(self):
+        return "MrBAVII MyPIM"
+
+    @property
+    def description(self):
+        return "A personal information manager"
+
+    def main(self):
+        """ Run the application. """
+
+        # Commandline arguments first
+        parser = argparse.ArgumentParser(description=self.description)
+
+        parser.add_argument("-e", "--entry", dest="entry", default=None,
+            help="Specify an entry point to call. Use '--' to separate the arguments to the entry point")
+        parser.add_argument("-l", "--listentry", dest="listentry", default=False,
+            action="store_true", help="List entry points")
+        parser.add_argument("-p", "--pim", default=None,
+            help="Specify the location of the PIM,");
+
+        # -- is used to separate main arguments from subarguments
+        argv = sys.argv[1:]
+        if "--" in argv:
+            pos = argv.index("--")
+            self._cmdline = parser.parse_args(argv[:pos])
+            self.cmdline.params = argv[pos + 1:]
+        else:
+            self._cmdline = parser.parse_args(argv)
+            self.cmdline.params = []
+
+        # If an entry point is specified, we run in command line only mode
+        if self.cmdline.entry or self.cmdline.listentry:
+            return self.main_with_entry()
+        else:
+            return self.gui_main()
+
+    def main_with_entry(self):
+        """ Handle calling the entry point. """
+
+        # The main purpose of entry points is if there is any exported data
+        # the entry point can be used to process the data without actually
+        # loading/connecting to the PIM the data was exported from and
+        # without launching in GUI so they can be used from the command line.
+
+        cmdline = self.cmdline
+
+        # If a PIM object was specified, then we load it
+        if cmdline.pim:
+            pim = Pim(self, cmdline.pim)
+            pim.connect()
+
+            if pim.check_install():
+                pim.install() # TODO: prompt user first
+            pim.open()
+        else:
+            pim = Pim(self, None) # An empty/unconnected PIM
+
+        if cmdline.listentry:
+            for entry in pim.get_model_entries():
+                print(entry)
+        elif cmdline.entry:
+            pim.call_model_entry(cmdline.entry, cmdline.params)
 

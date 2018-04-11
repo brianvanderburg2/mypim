@@ -13,7 +13,7 @@ import wx.html # Notes mention this should be imported before the wx.App is crea
 from mrbaviirc import app
 from mrbaviirc.gui.wx.art import ArtProvider
 
-from mrbavii_mypim.core.pim import Pim
+from mrbavii_mypim.core.pim import Pim, PimApp
 
 from .mainwindow import MainWindow
 
@@ -80,7 +80,7 @@ class GuiApp(wx.App):
             return False
 
         # Establish connection to PIM:
-        pim = Pim(directory)
+        pim = Pim(self._app, directory)
         pim.connect()
 
         if pim.check_install():
@@ -120,21 +120,9 @@ class GuiApp(wx.App):
         pass
 
 
-class App(app.App):
+class App(PimApp):
 
-    @property
-    def appname(self):
-        return "mrbavii-mypim"
-
-    @property
-    def displayname(self):
-        return "MrBAVII MyPIM"
-
-    @property
-    def description(self):
-        return "A personal information manager."
-
-    def main(self):
+    def gui_main(self):
         guiapp = GuiApp(self)
         guiapp.MainLoop()
 

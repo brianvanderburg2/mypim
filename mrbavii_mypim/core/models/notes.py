@@ -36,6 +36,7 @@ class NotesModel(Model):
     """ Represent a tree of notes. """
     MODEL_NAME="notes"
     MODEL_VERSION=1
+    MODEL_DEPENDS=["main"]
     NOTE_FILENAME="contents.note"
 
     # Valid name regex uses a literal space character to match a space but
@@ -45,7 +46,10 @@ class NotesModel(Model):
     def __init__(self, pim):
         """ Construct the notes model. """
         Model.__init__(self, pim)
-        self._directory = pim.get_storage_directory(self)
+        if pim.isreal():
+            self._directory = pim.get_storage_directory(self)
+        else:
+            self._directory = None
 
     def install(self):
         return NotesModelInstaller(self).install()

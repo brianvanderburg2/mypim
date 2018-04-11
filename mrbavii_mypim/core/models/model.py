@@ -35,6 +35,12 @@ class Model(object):
     def isok(self):
         return False
 
+    def get_entries(self):
+        return []
+
+    def call_entry(self, name, params):
+        raise NotImplementedError
+
 
 class ModelInstaller(object):
     """ Base class for a model installer/updater. """
