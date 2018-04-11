@@ -17,7 +17,7 @@ from collections import OrderedDict
 
 from mrbaviirc.pattern.listener import ListenerMixin
 from mrbaviirc.util import FileMover
-from mrbaviirc import app
+from mrbaviirc.app import AppHelper
 
 from . import errors
 
@@ -35,13 +35,13 @@ class Pim(ListenerMixin):
     methods.
     """
 
-    def __init__(self, app, directory):
+    def __init__(self, helper, directory):
         """ Create a PIM associated with a given directory. """
 
         ListenerMixin.__init__(self)
 
         # Basic setup
-        self._app = app
+        self._helper = helper
         self._directory = directory
         self._progress_fn = None
         self._log_fn = None
@@ -350,8 +350,8 @@ class Pim(ListenerMixin):
                     (name, int(version))
                 )
 
-class PimApp(app.App):
-    """ A base application object for the PIM. """
+class PimAppHelper(AppHelper):
+    """ A base application helper object for the PIM. """
 
     @property
     def appname(self):

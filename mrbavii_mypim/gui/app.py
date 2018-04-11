@@ -10,10 +10,10 @@ import os
 import wx
 import wx.html # Notes mention this should be imported before the wx.App is created
 
-from mrbaviirc import app
+#from mrbaviirc import app
 from mrbaviirc.gui.wx.art import ArtProvider
 
-from mrbavii_mypim.core.pim import Pim, PimApp
+from mrbavii_mypim.core.pim import Pim, PimAppHelper
 
 from .mainwindow import MainWindow
 
@@ -21,19 +21,19 @@ from .mainwindow import MainWindow
 
 class GuiApp(wx.App):
 
-    def __init__(self, app):
-        self._app = app
+    def __init__(self, helper):
+        self._helper = helper
 
         # Needs to be called last b/c it calls OnInit
         wx.App.__init__(self)
 
     def OnInit(self):
         # Set up common stuff
-        self.SetAppName(self._app.appname)
-        self.SetAppDisplayName(self._app.displayname)
+        self.SetAppName(self._helper.appname)
+        self.SetAppDisplayName(self._helper.displayname)
 
         # directory setup
-        self._path = self._app.traits.path
+        self._path = self._helper.traits.path
 
         confdir = self._path.get_user_config_dir()
         if not os.path.isdir(confdir):
@@ -80,7 +80,7 @@ class GuiApp(wx.App):
             return False
 
         # Establish connection to PIM:
-        pim = Pim(self._app, directory)
+        pim = Pim(self._helper, directory)
         pim.connect()
 
         if pim.check_install():
@@ -120,7 +120,7 @@ class GuiApp(wx.App):
         pass
 
 
-class App(PimApp):
+class GuiAppHelper(PimAppHelper):
 
     def gui_main(self):
         guiapp = GuiApp(self)
@@ -128,6 +128,6 @@ class App(PimApp):
 
 
 def main():
-    app = App()
+    app = GuiAppHelper()
     app.execute()
 
