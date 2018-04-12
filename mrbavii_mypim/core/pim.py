@@ -365,11 +365,9 @@ class PimAppHelper(AppHelper):
     def description(self):
         return "A personal information manager"
 
-    def main(self):
-        """ Run the application. """
-
-        # Commandline arguments first
-        parser = argparse.ArgumentParser(description=self.description)
+    def create_arg_parser(self):
+        """ Create the command line argument parser. """
+        parser = AppHelper.create_arg_parser(self)
 
         parser.add_argument("-e", "--entry", dest="entry", default=None,
             help="Specify an entry point to call. Use '--' to separate the arguments to the entry point")
@@ -377,19 +375,15 @@ class PimAppHelper(AppHelper):
             action="store_true", help="List entry points")
         parser.add_argument("-p", "--pim", default=None,
             help="Specify the location of the PIM,");
+        parser.add_remainder("extra_args")
 
-        # -- is used to separate main arguments from subarguments
-        argv = sys.argv[1:]
-        if "--" in argv:
-            pos = argv.index("--")
-            self._cmdline = parser.parse_args(argv[:pos])
-            self.cmdline.params = argv[pos + 1:]
-        else:
-            self._cmdline = parser.parse_args(argv)
-            self.cmdline.params = []
+        return parser
+
+    def main(self):
+        """ Run the application. """
 
         # If an entry point is specified, we run in command line only mode
-        if self.cmdline.entry or self.cmdline.listentry:
+        if self.args.entry or self.args.listentry:
             return self.main_with_entry()
         else:
             return self.gui_main()
@@ -402,11 +396,11 @@ class PimAppHelper(AppHelper):
         # loading/connecting to the PIM the data was exported from and
         # without launching in GUI so they can be used from the command line.
 
-        cmdline = self.cmdline
+        args = self.args
 
         # If a PIM object was specified, then we load it
-        if cmdline.pim:
-            pim = Pim(self, cmdline.pim)
+        if args.pim:
+            pim = Pim(self, args.pim)
             pim.connect()
 
             if pim.check_install():
@@ -415,9 +409,9 @@ class PimAppHelper(AppHelper):
         else:
             pim = Pim(self, None) # An empty/unconnected PIM
 
-        if cmdline.listentry:
+        if args.listentry:
             for entry in pim.get_model_entries():
                 print(entry)
-        elif cmdline.entry:
-            pim.call_model_entry(cmdline.entry, cmdline.params)
+        elif args.entry:
+            pim.call_model_entry(args.entry, args.extra_args)
 
