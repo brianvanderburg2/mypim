@@ -1,4 +1,4 @@
-""" Main PIM class and functions. """
+""" Main db class and functions. """
 
 __author__      =   "Brian Allen Vanderburg II"
 __copyright__   =   "Copyright (C) 2017 Brian Allen Vanderburg II"
@@ -8,7 +8,6 @@ __license__     =   "Apache License 2.0"
 import sys
 import os
 import sqlite3
-import argparse
 import gzip
 import datetime
 import shutil
@@ -17,26 +16,25 @@ from collections import OrderedDict
 
 from mrbaviirc.pattern.listener import ListenerMixin
 from mrbaviirc.util import FileMover
-from mrbaviirc.app import AppHelper
 
 from . import errors
 
 
 class Error(errors.Error):
-    """ Error class for the Pim object. """
+    """ Error class for the Database object. """
     pass
 
 
-class Pim(ListenerMixin):
+class Database(ListenerMixin):
     """
-    This object represents access to an instance of a PIM and it's data.
-    It provides methods to access files/directories under the PIM's data,
+    This object represents access to an instance of the notes and it's data.
+    It provides methods to access files/directories under the File's data,
     access database files in the form of Sqlite, as well as various other
     methods.
     """
 
     def __init__(self, helper, directory):
-        """ Create a PIM associated with a given directory. """
+        """ Create a database associated with a given directory. """
 
         ListenerMixin.__init__(self)
 
@@ -58,32 +56,9 @@ class Pim(ListenerMixin):
         for model in models.all_models:
             self._models[model.MODEL_NAME] = model(self)
 
-    def isreal(self):
-        """ Return if  the PIM is real.  A real PIM has an associated
-            directory and database.  An unreal PIM has no directory or
-            database and is just used for callin the entry points. """
-        return self._directory is not None
-
     def get_model(self, name):
         """ Return the instance for a given model. """
         return self._models.get(name, None)
-
-    def get_model_entries(self):
-        """ Return all available entry points. """
-        entries = []
-        for model in self._models:
-            entries.extend(self._models[model].get_entries())
-
-        return entries
-
-    def call_model_entry(self, entry, params):
-        """ Call an entry point. """
-        for model in self._models:
-            if entry in self._models[model].get_entries():
-                return self._models[model].call_entry(entry, params)
-
-        raise Error("No such entry: {}".format(entry))
-
 
     def _db_progress_handler(self):
         """ Called by sqlite3 every so many instructions. """
@@ -142,30 +117,18 @@ class Pim(ListenerMixin):
         sys.exit(-1)
 
     def get_directory(self):
-        """ Return the PIM directory. """
+        """ Return the db directory. """
         return self._directory
 
     def get_data_directories(self):
         """ Return a search path of supplied data directories, ie templates, etc. """
         dirs = (
             os.path.join(self._directory, "data"),
-            #platform.get_user_data_dir("mrbavii-mypim"),
+            #platform.get_user_data_dir("mrbavii-mynotes"),
             os.path.join(os.path.dirname(__file__), "..", "data")
         )
 
         return dirs
-
-    def get_storage_directory(self, model):
-        """ Return the storage directory. IE where the model puts it's files. """
-        return os.path.join(self._directory, model.MODEL_NAME)
-
-    def get_cache_directory(self, model):
-        """ Return a cache directory. """
-        return os.path.join(self._directory, "cache", model.MODEL_NAME)
-
-    def get_export_directory(self, model):
-        """ Return the export directory. """
-        return os.path.join(self._directory, "export", model.MODEL_NAME)
 
     # Database related code
     #######################
@@ -232,8 +195,8 @@ class Pim(ListenerMixin):
         # If an exception was passed in, reraise it
 
     def connect(self):
-        """ Establish the initial connection to the PIM. """
-        self._db_file = os.path.join(self._directory, "pim.db")
+        """ Establish the initial connection to the database. """
+        self._db_file = os.path.join(self._directory, "database.db")
 
         # Set isolation_level=None to avoid exec auto-begin/auto-commit
         self._db = sqlite3.connect(
@@ -274,7 +237,7 @@ class Pim(ListenerMixin):
                 self._models[model].install()
 
     def open(self):
-        """ Open the PIM """
+        """ Open the database models """
         for model in self._models:
             self._models[model].open()
 
@@ -349,69 +312,4 @@ class Pim(ListenerMixin):
                     """,
                     (name, int(version))
                 )
-
-class PimAppHelper(AppHelper):
-    """ A base application helper object for the PIM. """
-
-    @property
-    def appname(self):
-        return "mrbavii-mypim"
-
-    @property
-    def displayname(self):
-        return "MrBAVII MyPIM"
-
-    @property
-    def description(self):
-        return "A personal information manager"
-
-    def create_arg_parser(self):
-        """ Create the command line argument parser. """
-        parser = AppHelper.create_arg_parser(self)
-
-        parser.add_argument("-e", "--entry", dest="entry", default=None,
-            help="Specify an entry point to call. Use '--' to separate the arguments to the entry point")
-        parser.add_argument("-l", "--listentry", dest="listentry", default=False,
-            action="store_true", help="List entry points")
-        parser.add_argument("-p", "--pim", default=None,
-            help="Specify the location of the PIM,");
-        parser.add_remainder("extra_args")
-
-        return parser
-
-    def main(self):
-        """ Run the application. """
-
-        # If an entry point is specified, we run in command line only mode
-        if self.args.entry or self.args.listentry:
-            return self.main_with_entry()
-        else:
-            return self.gui_main()
-
-    def main_with_entry(self):
-        """ Handle calling the entry point. """
-
-        # The main purpose of entry points is if there is any exported data
-        # the entry point can be used to process the data without actually
-        # loading/connecting to the PIM the data was exported from and
-        # without launching in GUI so they can be used from the command line.
-
-        args = self.args
-
-        # If a PIM object was specified, then we load it
-        if args.pim:
-            pim = Pim(self, args.pim)
-            pim.connect()
-
-            if pim.check_install():
-                pim.install() # TODO: prompt user first
-            pim.open()
-        else:
-            pim = Pim(self, None) # An empty/unconnected PIM
-
-        if args.listentry:
-            for entry in pim.get_model_entries():
-                print(entry)
-        elif args.entry:
-            pim.call_model_entry(args.entry, args.extra_args)
 

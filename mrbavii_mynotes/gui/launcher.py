@@ -1,4 +1,4 @@
-""" Launcher to allow opening a given PIM. """
+""" Launcher to allow opening a given Notes. """
 
 __author__      =   "Brian Allen Vanderburg II"
 __copyright__   =   "Coryright (C) 2017 Brian Allen Vanderburg II"
@@ -9,11 +9,11 @@ import wx
 
 
 class LauncherDialog(wx.Dialog):
-    """ Dialog to prompt for a given PIM or allow creation of a new PIM. """
+    """ Dialog to prompt for a given Notes or allow creation of a new Notes. """
 
     def __init__(self):
         """ Initialize the dialog. """
-        wx.Dialog.__init__(self, None, wx.ID_ANY, "Choose PIM")
+        wx.Dialog.__init__(self, None, wx.ID_ANY, "Choose Notes")
 
         self.result = None
         self.InitGui()
@@ -22,9 +22,9 @@ class LauncherDialog(wx.Dialog):
         """ Create the GUI. """
 
         # Widgets
-        text = wx.StaticText(self, wx.ID_ANY, "Select a previous PIM to open from the list below, or a new PIM.")
+        text = wx.StaticText(self, wx.ID_ANY, "Select a previous Notes to open from the list below, or a new Notes.")
         self.history = wx.ListBox(self, size=(300, 200))
-        self.remember = wx.CheckBox(self, wx.ID_ANY, "Open the selected PIM at startup.")
+        self.remember = wx.CheckBox(self, wx.ID_ANY, "Open the selected Notes at startup.")
         choose_button = wx.Button(self, wx.ID_ANY, "Choose")
 
         self.Bind(wx.EVT_BUTTON, self.OnNew, choose_button)
@@ -63,7 +63,7 @@ class LauncherDialog(wx.Dialog):
     def OnNew(self, event):
         " Browse for a directory and add to the list. """
 
-        dir = wx.DirSelector("Choose PIM Directory")
+        dir = wx.DirSelector("Choose Notes Directory")
         if(dir):
             index = self.history.Append(dir)
             self.history.SetSelection(index)

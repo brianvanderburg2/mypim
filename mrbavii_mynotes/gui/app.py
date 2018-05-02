@@ -13,7 +13,8 @@ import wx.html # Notes mention this should be imported before the wx.App is crea
 #from mrbaviirc import app
 from mrbaviirc.gui.wx.art import ArtProvider
 
-from mrbavii_mypim.core.pim import Pim, PimAppHelper
+from mrbavii_mynotes.core.db import Database
+from mrbavii_mynotes.core.app import NotesAppHelper
 
 from .mainwindow import MainWindow
 
@@ -60,15 +61,15 @@ class GuiApp(wx.App):
             self.GetVendorName(),
             os.path.join(
                 self._path.get_user_config_dir(),
-                "mypim.conf"
+                "mynotes.conf"
             ),
             wx.EmptyString,
             wx.CONFIG_USE_LOCAL_FILE
         )
         wx.Config.Set(config)
 
-        # Show launcher or open previous PIM
-        last = config.Read("LastPim")
+        # Show launcher or open previous Notes
+        last = config.Read("LastNotes")
         if last and os.path.isdir(last):
             return self.Open(last)
         else:
@@ -79,25 +80,25 @@ class GuiApp(wx.App):
         if not os.path.isdir(directory):
             return False
 
-        # Establish connection to PIM:
-        pim = Pim(self._helper, directory)
-        pim.connect()
+        # Establish connection to notes database:
+        notes = Database(self._helper, directory)
+        notes.connect()
 
-        if pim.check_install():
-            pim.install() # TODO prompt user first, and wrap in progress dialog
+        if notes.check_install():
+            notes.install() # TODO prompt user first, and wrap in progress dialog
 
-        # Open the PIM, showing a progrss dialog
+        # Open the notes, showing a progrss dialog
         dlg = wx.ProgressDialog("Open", "Opening " + directory)
         def progress_callback(msg, pct):
             dlg.Pulse()
 
-        pim.register_progress_function(progress_callback)
-        pim.open()
-        pim.register_progress_function(None)
+        notes.register_progress_function(progress_callback)
+        notes.open()
+        notes.register_progress_function(None)
         dlg.Destroy()
 
         # Create and show the main window
-        window = MainWindow(pim)
+        window = MainWindow(notes)
         
         window.Show(True)
         self.SetTopWindow(window)
@@ -116,11 +117,11 @@ class GuiApp(wx.App):
             launcher.Destroy
             return False
 
-    def Upgrade(self, pim):
+    def Upgrade(self, notes):
         pass
 
 
-class GuiAppHelper(PimAppHelper):
+class GuiAppHelper(NotesAppHelper):
 
     def gui_main(self):
         guiapp = GuiApp(self)
